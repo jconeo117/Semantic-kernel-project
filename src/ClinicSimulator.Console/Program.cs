@@ -1,0 +1,76 @@
+﻿using Microsoft.SemanticKernel;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using ClinicSimulator.Core.Repositories;
+using ClinicSimulator.Core.Services;
+using ClinicSimulator.AI.Configuration;
+using ClinicSimulator.AI.Plugins;
+using ClinicSimulator.AI.Agents;
+
+namespace ClinicSimulator.Console;
+
+class Program
+{
+    static async Task Main(string[] args)
+    {
+        // Configuración
+        // Configuración
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: false)
+            .Build();
+
+        // Dependency Injection
+        var services = new ServiceCollection();
+
+        // Repositories
+        services.AddSingleton<IAppointmentRepository, InMemoryAppointments>();
+        services.AddSingleton<IPatients, InMemoryPatients>();
+
+        // Services
+        services.AddSingleton<IAppointmentService, AppointmentServices>();
+
+        var serviceProvider = services.BuildServiceProvider();
+
+        // Crear Kernel
+        var kernel = KernelFactory.CreateKernel(configuration);
+
+        // Registrar plugins
+        var appointmentService = serviceProvider.GetRequiredService<IAppointmentService>();
+        kernel.Plugins.AddFromObject(new AppointmentPlugin(appointmentService));
+        kernel.Plugins.AddFromObject(new ClinicInfoPlugin());
+
+        // Cargar system prompt
+        var systemPrompt = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Prompts", "ReceptionistPrompt.txt"));
+
+        // Crear agente
+        var receptionist = new RecepcionistAgent(kernel, systemPrompt);
+
+        // UI
+        System.Console.Clear();
+        System.Console.WriteLine("=== CLÍNICA VISTA CLARA - SISTEMA DE CITAS ===");
+        System.Console.WriteLine("Escribe 'salir' para terminar\n");
+
+        while (true)
+        {
+            System.Console.ForegroundColor = ConsoleColor.Green;
+            System.Console.Write("Usted: ");
+            System.Console.ResetColor();
+
+            var input = System.Console.ReadLine();
+
+            if (string.IsNullOrWhiteSpace(input)) continue;
+            if (input.ToLower() == "salir") break;
+
+            System.Console.ForegroundColor = ConsoleColor.Cyan;
+            System.Console.Write("Recepcionista: ");
+
+            var response = await receptionist.RespondAsync(input);
+            System.Console.WriteLine(response);
+            System.Console.ResetColor();
+            System.Console.WriteLine();
+        }
+
+        System.Console.WriteLine("¡Hasta luego!");
+    }
+}
