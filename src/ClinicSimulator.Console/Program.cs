@@ -43,6 +43,10 @@ class Program
         // Cargar system prompt
         var systemPrompt = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Prompts", "ReceptionistPrompt.txt"));
 
+        var today = DateTime.Now;
+        systemPrompt = systemPrompt.Replace("{{CURRENT_DATE}}", today.ToString("yyyy-MM-dd"));
+        systemPrompt = systemPrompt.Replace("{{CURRENT_DAY}}", today.ToString("dddd, MMMM dd, yyyy"));
+
         // Crear agente
         var receptionist = new RecepcionistAgent(kernel, systemPrompt);
 

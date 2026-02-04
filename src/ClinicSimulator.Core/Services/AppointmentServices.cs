@@ -2,56 +2,52 @@ using ClinicSimulator.Core.Models;
 using ClinicSimulator.Core.Services;
 using ClinicSimulator.Core.Repositories;
 
+namespace ClinicSimulator.Core.Services;
 public class AppointmentServices : IAppointmentService
 {
     private readonly IAppointmentRepository _appointmentRepository;
-    private List<Doctor> _doctors;
+    private readonly List<Doctor> _doctors;
     public AppointmentServices(IAppointmentRepository appointmentRepository)
     {
         _appointmentRepository = appointmentRepository;
-        _doctors = new List<Doctor>
-        {
-            new Doctor
-            {
-                Id = "DR-0001",
+        _doctors =
+        [
+            new() {
+                Id = "DR0001",
                 Name = "Dr. Carlos Ramírez",
                 Specialization = "Oftalmología General",
-                workingDays = new List<dayOfWeek>
-                {
-                    dayOfWeek.Monday,
-                    dayOfWeek.Tuesday,
-                    dayOfWeek.Wednesday,
-                    dayOfWeek.Thursday,
-                    dayOfWeek.Friday
-                },
+                workingDays =
+                [
+                    DayOfWeek.Monday,
+                    DayOfWeek.Tuesday,
+                    DayOfWeek.Wednesday,
+                    DayOfWeek.Thursday,
+                    DayOfWeek.Friday
+                ],
                 startTime = new TimeSpan(9, 0, 0),
                 endTime = new TimeSpan(18, 0, 0)
             },
-            new Doctor
-            {
-                Id = "DR-0002",
+            new() {
+                Id = "DR0002",
                 Name = "Dra. María González",
                 Specialization = "Retina",
-                workingDays = new List<dayOfWeek>
-                {
-                    dayOfWeek.Monday,
-                    dayOfWeek.Wednesday,
-                    dayOfWeek.Friday
-                },
+                workingDays =
+                [
+                    DayOfWeek.Monday,
+                    DayOfWeek.Wednesday,
+                    DayOfWeek.Friday
+                ],
                 startTime = new TimeSpan(10, 0, 0),
                 endTime = new TimeSpan(16, 0, 0)
             }
-        };
+        ];
     }
 
     public async Task<List<TimeSlot>> GetAvailableSlotsAsync(string doctorId, DateTime date)
     {
-        var doctor = _doctors.FirstOrDefault(d => d.Id.ToString() == doctorId);
-        if (doctor == null)
-            throw new ArgumentException("Doctor no encontrado");
-
-        if (!doctor.workingDays.Contains((dayOfWeek)date.DayOfWeek))
-            return new List<TimeSlot>();
+        var doctor = _doctors.FirstOrDefault(d => d.Id.ToString() == doctorId) ?? throw new ArgumentException("Doctor no encontrado");
+        if (!doctor.workingDays.Contains(date.DayOfWeek))
+            return [];
 
         var slots = new List<TimeSlot>();
         var currentTime = doctor.startTime;
@@ -87,13 +83,8 @@ public class AppointmentServices : IAppointmentService
             throw new InvalidOperationException("El horario ya esta ocupado");
         }
 
-        var doctor = _doctors.FirstOrDefault(d => d.Id.ToString() == doctorId);
-        if (doctor == null)
-        {
-            throw new Exception("Doctor no encontrado");
-        }
-
-        if (!doctor.workingDays.Contains((dayOfWeek)date.DayOfWeek))
+        var doctor = _doctors.FirstOrDefault(d => d.Id.ToString() == doctorId) ?? throw new Exception("Doctor no encontrado");
+        if (!doctor.workingDays.Contains(date.DayOfWeek))
         {
             throw new InvalidOperationException("El doctor no trabaja en esa fecha");
         }
@@ -136,5 +127,16 @@ public class AppointmentServices : IAppointmentService
     public async Task<List<Appointment>> GetAppointmentsByDateAsync(DateTime date)
     {
         return await _appointmentRepository.GetbyDate(date);
+    }
+
+    public List<Doctor> GetAllDoctors()
+    {
+        return _doctors.ToList();
+    }
+
+    public Doctor? GetDoctorByName(string name)
+    {
+        return _doctors.FirstOrDefault(d =>
+            d.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
     }
 }

@@ -1,7 +1,10 @@
+using ClinicSimulator.Core.Models;
+
 namespace ClinicSimulator.Core.Repositories;
+
 public class InMemoryPatients : IPatients
 {
-    private List<Patient> _patients = new List<Patient>();
+    private readonly List<Patient> _patients = [];
 
     public Task<Patient> CreateAsync(Patient patient)
     {
@@ -12,16 +15,16 @@ public class InMemoryPatients : IPatients
         return Task.FromResult(patient);
     }
 
-    public Task<Patient> findByEmailAsync(string email)
+    public Task<Patient> FindByEmailAsync(string email)
     {
         var patient = _patients.FirstOrDefault(p => p.Email == email);
-        return Task.FromResult(patient);
+        return Task.FromResult(patient!);
     }
 
-    public Task<Patient> findByPhoneAsync(string phone)
+    public Task<Patient> FindByPhoneAsync(string phone)
     {
         var patient = _patients.FirstOrDefault(p => p.Phone == phone);
-        return Task.FromResult(patient);
+        return Task.FromResult(patient!);
     }
 
     public Task<List<Patient>> GetAllAsync()
@@ -32,7 +35,7 @@ public class InMemoryPatients : IPatients
     public Task<Patient> GetByIdAsync(string id)
     {
         var patient = _patients.FirstOrDefault(p => p.Id == Guid.Parse(id));
-        return Task.FromResult(patient);
+        return Task.FromResult(patient!);
     }
 
     public Task<bool> UpdateAsync(Patient patient)

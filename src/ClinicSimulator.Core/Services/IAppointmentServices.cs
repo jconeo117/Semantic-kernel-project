@@ -16,4 +16,7 @@ public interface IAppointmentService
     Task<bool> CancelAppointmentAsync(string confirmationCode);
     Task<Appointment?> GetAppointmentAsync(string confirmationCode);
     Task<List<Appointment>> GetAppointmentsByDateAsync(DateTime date);
+
+    List<Doctor> GetAllDoctors();
+    Doctor? GetDoctorByName(string name);
 }

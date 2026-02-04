@@ -3,7 +3,7 @@ using ClinicSimulator.Core.Models;
 namespace ClinicSimulator.Core.Repositories;
 public class InMemoryAppointments : IAppointmentRepository
 {
-    private List<Appointment> _appointments = new List<Appointment>();
+    private readonly List<Appointment> _appointments = [];
     public Task<Appointment> CreateAsync(Appointment appointment)
     {
         appointment.Id = Guid.NewGuid();
@@ -38,13 +38,13 @@ public class InMemoryAppointments : IAppointmentRepository
     public Task<Appointment> GetByappointmentId(string id)
     {
         var appointment = _appointments.FirstOrDefault(a => a.Id == Guid.Parse(id));
-        return Task.FromResult(appointment);
+        return Task.FromResult(appointment!);
     }
 
     public Task<Appointment> GetByConfirmationCode(string confirmationCode)
     {
         var appointment = _appointments.FirstOrDefault(a => a.ConfirmationId == confirmationCode);
-        return Task.FromResult(appointment);
+        return Task.FromResult(appointment!);
     }
 
     public Task<List<Appointment>> GetbyDate(DateTime date)

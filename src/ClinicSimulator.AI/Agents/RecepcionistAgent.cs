@@ -27,7 +27,7 @@ public class RecepcionistAgent
         var settings = new OpenAIPromptExecutionSettings
         {
             ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions,
-            Temperature = 0.2,
+            Temperature = 0.7,
             MaxTokens = 500
         };
 

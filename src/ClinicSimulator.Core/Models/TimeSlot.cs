@@ -1,3 +1,4 @@
+namespace ClinicSimulator.Core.Models;
 public class TimeSlot
 {
     // Fecha y hora
