@@ -41,9 +41,10 @@ public class FunctionInvocationFilter : IFunctionInvocationFilter
             Console.WriteLine($"║ ✅ SUCCESS");
             Console.WriteLine($"║ ⏱️  Duration: {stopwatch.ElapsedMilliseconds}ms");
 
-            if (context.Result?.ValueType != null)
+            if (context.Result != null)
             {
-                var resultStr = context.Result.ValueType.ToString() ?? "";
+                var resultValue = context.Result.GetValue<object>();
+                var resultStr = resultValue?.ToString() ?? "null";
                 var preview = resultStr.Length > 150
                     ? resultStr.Substring(0, 150) + "..."
                     : resultStr;

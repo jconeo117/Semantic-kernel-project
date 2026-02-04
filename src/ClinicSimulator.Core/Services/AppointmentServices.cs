@@ -13,7 +13,7 @@ public class AppointmentServices : IAppointmentService
         _doctors =
         [
             new() {
-                Id = "DR0001",
+                Id = "DR001",
                 Name = "Dr. Carlos Ramírez",
                 Specialization = "Oftalmología General",
                 workingDays =
@@ -28,7 +28,7 @@ public class AppointmentServices : IAppointmentService
                 endTime = new TimeSpan(18, 0, 0)
             },
             new() {
-                Id = "DR0002",
+                Id = "DR002",
                 Name = "Dra. María González",
                 Specialization = "Retina",
                 workingDays =
@@ -45,7 +45,7 @@ public class AppointmentServices : IAppointmentService
 
     public async Task<List<TimeSlot>> GetAvailableSlotsAsync(string doctorId, DateTime date)
     {
-        var doctor = _doctors.FirstOrDefault(d => d.Id.ToString() == doctorId) ?? throw new ArgumentException("Doctor no encontrado");
+        var doctor = _doctors.FirstOrDefault(d => d.Id == doctorId) ?? throw new ArgumentException("Doctor no encontrado");
         if (!doctor.workingDays.Contains(date.DayOfWeek))
             return [];
 
