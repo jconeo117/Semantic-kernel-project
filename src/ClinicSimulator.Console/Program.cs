@@ -18,22 +18,23 @@ class Program
         var configuration = new ConfigurationBuilder()
             .SetBasePath(AppContext.BaseDirectory)
             .AddJsonFile("appsettings.json", optional: false)
+            .AddUserSecrets<Program>()
             .Build();
 
         // Dependency Injection
         var services = new ServiceCollection();
 
         // Repositories
-        services.AddSingleton<IAppointmentRepository, InMemoryAppointments>();
+        services.AddSingleton<IAppointmentRepository, JsonAppointment>();
         services.AddSingleton<IPatients, InMemoryPatients>();
 
         // Services
         services.AddSingleton<IAppointmentService, AppointmentServices>();
 
         var serviceProvider = services.BuildServiceProvider();
-
+        var provider = configuration["AI:Provider"];
         // Crear Kernel
-        var kernel = KernelFactory.CreateKernel(configuration);
+        var kernel = KernelFactory.CreateKernel(configuration, provider!);
 
         // Registrar plugins
         var appointmentService = serviceProvider.GetRequiredService<IAppointmentService>();
@@ -48,7 +49,7 @@ class Program
         systemPrompt = systemPrompt.Replace("{{CURRENT_DAY}}", today.ToString("dddd, MMMM dd, yyyy"));
 
         // Crear agente
-        var receptionist = new RecepcionistAgent(kernel, systemPrompt);
+        var receptionist = new RecepcionistAgent(kernel, systemPrompt, provider!);
 
         // UI
         System.Console.Clear();
