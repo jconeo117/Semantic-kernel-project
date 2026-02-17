@@ -2,6 +2,9 @@ using ClinicSimulator.Core.Models;
 using ClinicSimulator.Core.Services;
 using ClinicSimulator.Core.Repositories;
 
+using System.Text;
+using System.Globalization;
+
 namespace ClinicSimulator.Core.Services;
 public class AppointmentServices : IAppointmentService
 {
@@ -97,10 +100,12 @@ public class AppointmentServices : IAppointmentService
         var appointment = new Appointment
         {
             Id = Guid.NewGuid(),
+            PatientId = Guid.NewGuid().ToString(),
             PatientName = patientName,
             PatientPhone = phone,
             PatientEmail = email,
             DoctorId = doctorId,
+            DoctorName = doctor.Name,
             AppointmentDate = date,
             AppointmentTime = time,
             Reason = reason,
@@ -134,9 +139,39 @@ public class AppointmentServices : IAppointmentService
         return _doctors.ToList();
     }
 
-    public Doctor? GetDoctorByName(string name)
+    public List<Doctor> SearchDoctors(string query)
     {
-        return _doctors.FirstOrDefault(d =>
-            d.Name.Contains(name, StringComparison.OrdinalIgnoreCase));
+        if (string.IsNullOrWhiteSpace(query)) return [];
+
+        var normalizedQuery = RemoveDiacritics(query.Trim());
+        var queryTokens = normalizedQuery.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        return _doctors.Where(d =>
+        {
+            var normalizedName = RemoveDiacritics(d.Name);
+            // Verificar que TODOS los tokens de la búsqueda aparezcan en el nombre del doctor
+            return queryTokens.All(token =>
+                normalizedName.Contains(token, StringComparison.OrdinalIgnoreCase) ||
+                // También permitir buscar por ID exacto
+                d.Id.Equals(token, StringComparison.OrdinalIgnoreCase)
+            );
+        }).ToList();
+    }
+
+    private static string RemoveDiacritics(string text)
+    {
+        var normalizedString = text.Normalize(NormalizationForm.FormD);
+        var stringBuilder = new StringBuilder(capacity: normalizedString.Length);
+
+        foreach (var c in normalizedString)
+        {
+            var unicodeCategory = CharUnicodeInfo.GetUnicodeCategory(c);
+            if (unicodeCategory != UnicodeCategory.NonSpacingMark)
+            {
+                stringBuilder.Append(c);
+            }
+        }
+
+        return stringBuilder.ToString().Normalize(NormalizationForm.FormC);
     }
 }

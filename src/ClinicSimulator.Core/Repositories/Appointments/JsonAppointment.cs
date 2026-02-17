@@ -1,15 +1,48 @@
+using System.Text.Json;
 using ClinicSimulator.Core.Models;
+using ClinicSimulator.Core.Repositories;
 
 namespace ClinicSimulator.Core.Repositories;
-public class InMemoryAppointments : IAppointmentRepository
+public class JsonAppointment : IAppointmentRepository
 {
-    private readonly List<Appointment> _appointments = [];
+    private readonly string _filePath;
+    private List<Appointment> _appointments;
+
+    public JsonAppointment()
+    {
+        _filePath = Path.Combine(AppContext.BaseDirectory, "Appointments.json");
+        _appointments = LoadData();
+    }
+    private List<Appointment> LoadData()
+    {
+        if (!File.Exists(_filePath))
+            return new List<Appointment>();
+
+        try
+        {
+            var json = File.ReadAllText(_filePath);
+            return JsonSerializer.Deserialize<List<Appointment>>(json) ?? new List<Appointment>();
+        }
+        catch
+        {
+            return new List<Appointment>();
+        }
+    }
+
+    private void SaveChanges()
+    {
+        var options = new JsonSerializerOptions { WriteIndented = true };
+        var json = JsonSerializer.Serialize(_appointments, options);
+        File.WriteAllText(_filePath, json);
+    }
+
     public Task<Appointment> CreateAsync(Appointment appointment)
     {
         appointment.Id = Guid.NewGuid();
         appointment.ConfirmationId = $"CITA-{appointment.Id.ToString()[..4].ToUpper()}";
         appointment.CreatedAt = DateTime.Now;
         _appointments.Add(appointment);
+        SaveChanges();
         return Task.FromResult(appointment);
     }
 
@@ -21,6 +54,7 @@ public class InMemoryAppointments : IAppointmentRepository
             return Task.FromResult(false);
         }
         _appointments.Remove(appointment);
+        SaveChanges();
         return Task.FromResult(true);
     }
 
@@ -66,6 +100,10 @@ public class InMemoryAppointments : IAppointmentRepository
 
         var index = _appointments.IndexOf(existing);
         _appointments[index] = appointment;
+        SaveChanges();
         return Task.FromResult(true);
     }
+
+
+
 }

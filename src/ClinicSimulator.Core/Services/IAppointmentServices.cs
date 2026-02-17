@@ -18,5 +18,5 @@ public interface IAppointmentService
     Task<List<Appointment>> GetAppointmentsByDateAsync(DateTime date);
 
     List<Doctor> GetAllDoctors();
-    Doctor? GetDoctorByName(string name);
+    List<Doctor> SearchDoctors(string query);
 }
