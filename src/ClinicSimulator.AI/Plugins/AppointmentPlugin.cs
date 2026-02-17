@@ -48,17 +48,19 @@ public class AppointmentPlugin
             return "Por favor, usar el formato YYYY-MM-DD";
 
         // Obtener lista de doctores del servicio
-        var allDoctors = _appointmentService.GetAllDoctors(); // ← Necesitamos agregar esto
+        // var allDoctors = _appointmentService.GetAllDoctors(); // ← Necesitamos agregar esto (Ya no es necesario con SearchDoctors)
 
-        // Buscar doctores que coincidan
-        var matchingDoctors = allDoctors.Where(d =>
-            doctorQuery.ToLower() == "cualquiera" ||
-            d.Name.Contains(doctorQuery, StringComparison.OrdinalIgnoreCase) ||
-            d.Specialization.Contains(doctorQuery, StringComparison.OrdinalIgnoreCase)
-        ).ToList();
+        // Buscar doctores que coincidan usando el nuevo método robusto
+        var matchingDoctors = _appointmentService.SearchDoctors(doctorQuery);
+
+        // Si la busqueda es "cualquiera", traemos todos (SearchDoctors podria devolver todo si query vacio, pero mejor ser explicito)
+        if (doctorQuery.ToLower() == "cualquiera")
+        {
+            matchingDoctors = _appointmentService.GetAllDoctors();
+        }
 
         if (!matchingDoctors.Any())
-            return $"No se encontró doctor que coincida con '{doctorQuery}'. Doctores disponibles: {string.Join(", ", allDoctors.Select(d => d.Name))}";
+            return $"No se encontró doctor que coincida con '{doctorQuery}'. Doctores disponibles: {string.Join(", ", _appointmentService.GetAllDoctors().Select(d => d.Name))}";
 
         // Buscar slots para cada doctor
         var results = new List<string>();
@@ -93,9 +95,23 @@ public class AppointmentPlugin
     [Description("Razon de la cita")] string reason
 )
     {
-        if (string.IsNullOrEmpty(PatientEmail) || PatientEmail == "no-email")
+        // Lista negra de palabras que el modelo suele inventar
+        var invalidTerms = new[] { "no email", "no-email", "unknown", "no nombre", "string", "user", "no phone" };
+
+        if (string.IsNullOrWhiteSpace(PatientName) || invalidTerms.Any(t => PatientName.ToLower().Contains(t)))
         {
-            return "FALLO: No se puede agendar. Falta el CORREO ELECTRÓNICO del paciente. Por favor pídeselo al usuario.";
+            // Retornamos instrucción para el MODELO, no para el usuario final directamente.
+            return "FALLO DE VALIDACIÓN: Falta el NOMBRE del paciente. NO inventes valores. PREGUNTA al usuario su nombre.";
+        }
+
+        if (string.IsNullOrWhiteSpace(PatientEmail) || !PatientEmail.Contains("@") || invalidTerms.Any(t => PatientEmail.ToLower().Contains(t)))
+        {
+            return "FALLO DE VALIDACIÓN: Falta un EMAIL válido. NO uses 'no-email'. PREGUNTA al usuario su correo.";
+        }
+
+        if (string.IsNullOrWhiteSpace(PatientPhone) || invalidTerms.Any(t => PatientPhone.ToLower().Contains(t)))
+        {
+            return "FALLO DE VALIDACIÓN: Falta el TELÉFONO. PREGUNTA al usuario su número.";
         }
 
         try
@@ -107,14 +123,15 @@ public class AppointmentPlugin
                 return $"FALLO: La hora '{stringtime}' no es válida. Usa formato HH:MM (24h).";
 
             // ✅ BUSCAR DOCTOR POR NOMBRE O ID
-            var allDoctors = _appointmentService.GetAllDoctors();
-            var doctor = allDoctors.FirstOrDefault(d =>
-                d.Id == doctorNameOrId ||
-                d.Name.Contains(doctorNameOrId, StringComparison.OrdinalIgnoreCase)
-            );
+            var matchingDoctors = _appointmentService.SearchDoctors(doctorNameOrId);
 
-            if (doctor == null)
-                return $"FALLO: No se encontró doctor '{doctorNameOrId}'. Doctores disponibles: {string.Join(", ", allDoctors.Select(d => d.Name))}";
+            if (matchingDoctors.Count == 0)
+                return $"FALLO: No se encontró doctor '{doctorNameOrId}'. Doctores disponibles: {string.Join(", ", _appointmentService.GetAllDoctors().Select(d => d.Name))}";
+
+            if (matchingDoctors.Count > 1)
+                return $"FALLO: Multiples doctores encontrados para '{doctorNameOrId}': {string.Join(", ", matchingDoctors.Select(d => d.Name))}. Por favor sea más específico.";
+
+            var doctor = matchingDoctors.First();
 
             var patient = new Patient
             {
