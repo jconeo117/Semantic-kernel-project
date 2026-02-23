@@ -9,22 +9,18 @@ public class RecepcionistAgent
 {
     private readonly Kernel _kernel;
     private readonly IChatCompletionService _ChatCompletionService;
-    private readonly ChatHistory _ChatHistory;
-    private readonly string _systemPrompt;
     private readonly string _provider;
 
-    public RecepcionistAgent(Kernel kernel, string systemPrompt, string provider)
+    public RecepcionistAgent(Kernel kernel, string provider)
     {
         _kernel = kernel;
         _ChatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
-        _systemPrompt = systemPrompt;
-        _ChatHistory = new ChatHistory(_systemPrompt);
         _provider = provider;
     }
 
-    public async Task<string> RespondAsync(string UserMessage)
+    public async Task<string> RespondAsync(string UserMessage, ChatHistory chatHistory)
     {
-        _ChatHistory.AddUserMessage(UserMessage);
+        chatHistory.AddUserMessage(UserMessage);
         PromptExecutionSettings? settings = null;
 
         if (_provider == "Google")
@@ -48,19 +44,13 @@ public class RecepcionistAgent
         }
 
         var result = await _ChatCompletionService.GetChatMessageContentAsync(
-            _ChatHistory,
+            chatHistory,
             settings,
             _kernel
         );
 
-        _ChatHistory.AddAssistantMessage(result.Content ?? string.Empty);
+        chatHistory.AddAssistantMessage(result.Content ?? string.Empty);
 
         return result.Content ?? "Lo siento, no pude procesar su solicitud.";
-    }
-
-    public void Reset()
-    {
-        _ChatHistory.Clear();
-        _ChatHistory.AddSystemMessage(_systemPrompt);
     }
 }
