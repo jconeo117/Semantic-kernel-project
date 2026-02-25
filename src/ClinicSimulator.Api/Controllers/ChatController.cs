@@ -1,5 +1,9 @@
 using ClinicSimulator.AI.Agents;
+using ClinicSimulator.Core.Adapters;
+using ClinicSimulator.Core.Models;
 using ClinicSimulator.Core.Repositories;
+using ClinicSimulator.Core.Security;
+using ClinicSimulator.Core.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClinicSimulator.Api.Controllers;
@@ -10,31 +14,31 @@ public class ChatController : ControllerBase
 {
     private readonly RecepcionistAgent _agent;
     private readonly IChatSessionRepository _sessionRepository;
-    private readonly string _systemPrompt;
+    private readonly TenantContext _tenantContext;
+    private readonly IPromptBuilder _promptBuilder;
+    private readonly IClientDataAdapter _adapter;
+    private readonly IInputGuard _inputGuard;
+    private readonly IOutputFilter _outputFilter;
+    private readonly IAuditLogger _auditLogger;
 
-    public ChatController(RecepcionistAgent agent, IChatSessionRepository sessionRepository, IConfiguration configuration)
+    public ChatController(
+        RecepcionistAgent agent,
+        IChatSessionRepository sessionRepository,
+        TenantContext tenantContext,
+        IPromptBuilder promptBuilder,
+        IClientDataAdapter adapter,
+        IInputGuard inputGuard,
+        IOutputFilter outputFilter,
+        IAuditLogger auditLogger)
     {
         _agent = agent;
         _sessionRepository = sessionRepository;
-
-        // Cargar system prompt (idealmente esto debería estar en un servicio o caché, no leer archivo en cada request)
-        // Por simplicidad para la migración inicial, lo leemos aquí o lo inyectamos.
-        // Mejor opción: Leerlo una vez en Program.cs y pasarlo como Singleton o similar.
-        // Asumiremos que se ha registrado como string en DI o lo leemos aquí.
-        var promptPath = Path.Combine(AppContext.BaseDirectory, "Prompts", "ReceptionistPrompt.txt");
-        if (System.IO.File.Exists(promptPath))
-        {
-            _systemPrompt = System.IO.File.ReadAllText(promptPath);
-        }
-        else
-        {
-            _systemPrompt = "Eres una recepcionista de clínica."; // Fallback
-        }
-
-        // Reemplazos dinámicos
-        var today = DateTime.Now;
-        _systemPrompt = _systemPrompt.Replace("{{CURRENT_DATE}}", today.ToString("yyyy-MM-dd"));
-        _systemPrompt = _systemPrompt.Replace("{{CURRENT_DAY}}", today.ToString("dddd, MMMM dd, yyyy"));
+        _tenantContext = tenantContext;
+        _promptBuilder = promptBuilder;
+        _adapter = adapter;
+        _inputGuard = inputGuard;
+        _outputFilter = outputFilter;
+        _auditLogger = auditLogger;
     }
 
     [HttpPost]
@@ -45,21 +49,90 @@ public class ChatController : ControllerBase
             return BadRequest("Message is required.");
         }
 
+        if (!_tenantContext.IsResolved)
+        {
+            return BadRequest("Tenant no resuelto.");
+        }
+
+        var tenantId = _tenantContext.CurrentTenant!.TenantId;
         var sessionId = request.SessionId == Guid.Empty ? Guid.NewGuid() : request.SessionId;
 
-        // 1. Cargar historial
-        var history = await _sessionRepository.GetChatHistoryAsync(sessionId, _systemPrompt);
+        // ═══ PASO 1: Input Guard - Detectar prompt injection ═══
+        var guardResult = await _inputGuard.AnalyzeAsync(request.Message);
 
-        // 2. Procesar mensaje con el agente
+        // Log del mensaje del usuario (siempre)
+        await _auditLogger.LogAsync(new AuditEntry
+        {
+            TenantId = tenantId,
+            SessionId = sessionId,
+            EventType = "UserMessage",
+            Content = request.Message,
+            ThreatLevel = guardResult.Level
+        });
+
+        if (!guardResult.IsAllowed)
+        {
+            // Log del bloqueo de seguridad
+            await _auditLogger.LogAsync(new AuditEntry
+            {
+                TenantId = tenantId,
+                SessionId = sessionId,
+                EventType = "SecurityBlock",
+                Content = guardResult.RejectionReason ?? "Mensaje bloqueado",
+                ThreatLevel = guardResult.Level,
+                Metadata = new() { ["originalMessage"] = request.Message }
+            });
+
+            // Retornar respuesta genérica (mantener el rol, NO error HTTP)
+            return Ok(new ChatResponse
+            {
+                SessionId = sessionId,
+                Response = guardResult.RejectionReason
+                    ?? "Solo puedo ayudarle con la gestión de citas. ¿Desea agendar una cita?"
+            });
+        }
+
+        // ═══ PASO 2: Procesar mensaje con el agente ═══
+        var providers = await _adapter.GetAllProvidersAsync();
+        var systemPrompt = await _promptBuilder.BuildSystemPromptAsync(_tenantContext.CurrentTenant!, providers);
+        var history = await _sessionRepository.GetChatHistoryAsync(sessionId, systemPrompt);
+
         var response = await _agent.RespondAsync(request.Message, history);
 
-        // 3. Guardar historial actualizado
         await _sessionRepository.UpdateChatHistoryAsync(sessionId, history);
+
+        // ═══ PASO 3: Output Filter - Filtrar PII y prompt leaks ═══
+        var filterResult = await _outputFilter.FilterAsync(response, tenantId);
+
+        if (filterResult.WasModified)
+        {
+            await _auditLogger.LogAsync(new AuditEntry
+            {
+                TenantId = tenantId,
+                SessionId = sessionId,
+                EventType = "OutputFiltered",
+                Content = "Respuesta filtrada por seguridad",
+                Metadata = new()
+                {
+                    ["redactedItems"] = string.Join(", ", filterResult.RedactedItems),
+                    ["originalLength"] = response.Length.ToString()
+                }
+            });
+        }
+
+        // Log de la respuesta del agente
+        await _auditLogger.LogAsync(new AuditEntry
+        {
+            TenantId = tenantId,
+            SessionId = sessionId,
+            EventType = "AgentResponse",
+            Content = filterResult.FilteredContent
+        });
 
         return Ok(new ChatResponse
         {
             SessionId = sessionId,
-            Response = response
+            Response = filterResult.FilteredContent
         });
     }
 }
