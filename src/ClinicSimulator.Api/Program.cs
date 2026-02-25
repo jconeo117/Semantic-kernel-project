@@ -1,9 +1,13 @@
 using ClinicSimulator.AI.Agents;
 using ClinicSimulator.AI.Configuration;
 using ClinicSimulator.AI.Plugins;
+using ClinicSimulator.Core.Adapters;
 using ClinicSimulator.Core.Repositories;
 using ClinicSimulator.Core.Services;
 using Microsoft.SemanticKernel;
+
+// Alias para resolver ambiguedad con Microsoft.Extensions.DependencyInjection.ServiceProvider
+using ServiceProviderModel = ClinicSimulator.Core.Models.ServiceProvider;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,22 +16,49 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// --- Demo Providers (serán reemplazados por TenantConfiguration en Phase 2) ---
+var demoProviders = new List<ServiceProviderModel>
+{
+    new()
+    {
+        Id = "DR001",
+        Name = "Dr. Carlos Ramírez",
+        Role = "Oftalmología General",
+        WorkingDays =
+        [
+            DayOfWeek.Monday,
+            DayOfWeek.Tuesday,
+            DayOfWeek.Wednesday,
+            DayOfWeek.Thursday,
+            DayOfWeek.Friday
+        ],
+        StartTime = new TimeSpan(9, 0, 0),
+        EndTime = new TimeSpan(18, 0, 0),
+        SlotDurationMinutes = 30
+    },
+    new()
+    {
+        Id = "DR002",
+        Name = "Dra. María González",
+        Role = "Retina",
+        WorkingDays =
+        [
+            DayOfWeek.Monday,
+            DayOfWeek.Wednesday,
+            DayOfWeek.Friday
+        ],
+        StartTime = new TimeSpan(10, 0, 0),
+        EndTime = new TimeSpan(16, 0, 0),
+        SlotDurationMinutes = 30
+    }
+};
+
 // --- Application Core Services ---
-builder.Services.AddSingleton<IAppointmentRepository, JsonAppointment>();
-builder.Services.AddSingleton<IPatients, InMemoryPatients>();
-builder.Services.AddSingleton<IAppointmentService, AppointmentServices>();
+builder.Services.AddSingleton<IClientDataAdapter>(new InMemoryClientAdapter(demoProviders));
+builder.Services.AddSingleton<IBookingService, BookingService>();
 builder.Services.AddSingleton<IChatSessionRepository, InMemoryChatSessionRepository>();
 
-// --- Helper for System Prompt ---
-// Registers the system prompt as a string content read from file
-builder.Services.AddSingleton<string>(sp =>
-{
-    var promptPath = Path.Combine(AppContext.BaseDirectory, "Prompts", "ReceptionistPrompt.txt");
-    return File.Exists(promptPath) ? File.ReadAllText(promptPath) : "Eres una recepcionista.";
-});
-
 // --- Semantic Kernel & AI ---
-// Register Agent as Transient or Scoped
 builder.Services.AddScoped<RecepcionistAgent>(sp =>
 {
     var kernel = sp.GetRequiredService<Kernel>();
@@ -36,7 +67,6 @@ builder.Services.AddScoped<RecepcionistAgent>(sp =>
     return new RecepcionistAgent(kernel, provider);
 });
 
-// Register Kernel
 builder.Services.AddScoped<Kernel>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
@@ -44,9 +74,10 @@ builder.Services.AddScoped<Kernel>(sp =>
     var kernel = KernelFactory.CreateKernel(configuration, provider);
 
     // Register Plugins
-    var appointmentService = sp.GetRequiredService<IAppointmentService>();
-    kernel.Plugins.AddFromObject(new AppointmentPlugin(appointmentService), "AppointmentPlugin");
-    kernel.Plugins.AddFromObject(new ClinicInfoPlugin(), "ClinicInfoPlugin");
+    var bookingService = sp.GetRequiredService<IBookingService>();
+    var adapter = sp.GetRequiredService<IClientDataAdapter>();
+    kernel.Plugins.AddFromObject(new BookingPlugin(bookingService), "BookingPlugin");
+    kernel.Plugins.AddFromObject(new BusinessInfoPlugin(adapter), "BusinessInfoPlugin");
 
     return kernel;
 });
