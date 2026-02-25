@@ -8,10 +8,12 @@ namespace ClinicSimulator.AI.Plugins;
 public class BusinessInfoPlugin
 {
     private readonly IClientDataAdapter _adapter;
+    private readonly TenantContext _tenantContext;
 
-    public BusinessInfoPlugin(IClientDataAdapter adapter)
+    public BusinessInfoPlugin(IClientDataAdapter adapter, TenantContext tenantContext)
     {
         _adapter = adapter;
+        _tenantContext = tenantContext;
     }
 
     [KernelFunction]
@@ -42,15 +44,29 @@ public class BusinessInfoPlugin
     public string GetBusinessInfo(
         [Description("Tipo: ubicacion, horarios, servicios, seguros, precios")] string infoType)
     {
-        // TODO: En Phase 2 (Multi-Tenant), estos datos vendrán de TenantConfiguration.
-        // Por ahora mantenemos datos demo para que la API siga funcionando.
+        var tenant = _tenantContext.CurrentTenant;
+
+        if (tenant == null)
+            return "Información del negocio no disponible.";
+
         return infoType.ToLower() switch
         {
-            "ubicacion" => "Clínica Vista Clara\nAv. Principal 123, Montería\nEntre calles 5 y 6",
-            "horarios" => "Horarios de atención:\nLunes a Viernes: 9:00 AM - 6:00 PM\nSábados: 9:00 AM - 1:00 PM",
-            "servicios" => "Servicios disponibles:\n- Consulta general oftalmológica\n- Cirugía refractiva\n- Tratamiento de glaucoma\n- Enfermedades de la retina\n- Exámenes de la vista",
-            "seguros" => "Seguros aceptados:\n- Pacífico\n- Rímac\n- Mapfre\n- Nueva EPS",
-            "precios" => "Consulta general: $50 USD\nConsulta especializada: $80 USD\n(Precios pueden variar según el seguro)",
+            "ubicacion" => $"{tenant.BusinessName}\n{tenant.Address}\nTeléfono: {tenant.Phone}",
+
+            "horarios" => $"Horarios de atención:\n{tenant.WorkingHours}",
+
+            "servicios" => tenant.Services.Any()
+                ? $"Servicios disponibles:\n{string.Join("\n", tenant.Services.Select(s => $"- {s}"))}"
+                : "Consultar servicios disponibles con el negocio.",
+
+            "seguros" => tenant.AcceptedInsurance.Any()
+                ? $"Seguros aceptados:\n{string.Join("\n", tenant.AcceptedInsurance.Select(i => $"- {i}"))}"
+                : "No aplica o consultar con el negocio.",
+
+            "precios" => tenant.Pricing.Any()
+                ? string.Join("\n", tenant.Pricing.Select(p => $"- {p.Key}: {p.Value}"))
+                : "Consultar precios en el establecimiento.",
+
             _ => "Tipos de información disponibles: ubicacion, horarios, servicios, seguros, precios"
         };
     }

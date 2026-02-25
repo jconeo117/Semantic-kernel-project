@@ -185,13 +185,22 @@ public class BookingPlugin
     }
 
     [KernelFunction]
-    [Description("Obtener informacion de una cita")]
+    [Description("Obtener informacion de una cita. Requiere código Y nombre del cliente para verificación.")]
     public async Task<string> GetAppointmentInfo(
-        [Description("Codigo de confirmacion de la cita")] string confirmationCode)
+        [Description("Codigo de confirmacion de la cita")] string confirmationCode,
+        [Description("Nombre del cliente para verificación de identidad")] string clientName)
     {
         var booking = await _bookingService.GetBookingAsync(confirmationCode);
         if (booking == null)
             return $"La cita con el código {confirmationCode} no fue encontrada, pruebe nuevamente.";
+
+        // Verificación de identidad: el nombre debe coincidir
+        if (string.IsNullOrWhiteSpace(clientName) ||
+            !booking.ClientName.Contains(clientName.Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            return "No se puede verificar la identidad. El nombre proporcionado no coincide con el registro. " +
+                   "Por favor, confirme el nombre completo asociado a esta cita.";
+        }
 
         return $"Cita {booking.ConfirmationCode}:\n" +
                $"Cliente: {booking.ClientName}\n" +
@@ -202,15 +211,16 @@ public class BookingPlugin
     }
 
     [KernelFunction]
-    [Description("Lista todas las citas agendadas para el dia de hoy.")]
+    [Description("Lista la ocupación de citas para hoy (sin datos de clientes por privacidad).")]
     public async Task<string> GetAllAppointmentsByDate()
     {
         var bookings = await _bookingService.GetBookingsByDateAsync(DateTime.Now.Date);
         if (!bookings.Any())
             return "No hay citas agendadas para hoy";
 
-        return string.Join("\n", bookings.Select(b =>
-            $"[{b.ConfirmationCode}] {b.ClientName} - {b.ProviderName} - " +
-            $"{b.ScheduledDate:yyyy-MM-dd} {b.ScheduledTime:hh\\:mm}"));
+        // SEGURIDAD: No exponer nombres de clientes
+        return $"Citas agendadas para hoy ({bookings.Count} total):\n" +
+               string.Join("\n", bookings.Select(b =>
+                   $"- {b.ScheduledTime:hh\\:mm} con {b.ProviderName} ({b.Status})"));
     }
 }
