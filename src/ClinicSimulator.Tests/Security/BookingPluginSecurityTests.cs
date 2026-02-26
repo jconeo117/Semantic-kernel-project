@@ -1,6 +1,7 @@
 using ClinicSimulator.AI.Plugins;
 using ClinicSimulator.Core.Models;
 using ClinicSimulator.Core.Services;
+using ClinicSimulator.Core.Session;
 using Moq;
 using Xunit;
 
@@ -38,7 +39,8 @@ public class BookingPluginSecurityTests
         _mockService.Setup(s => s.GetBookingsByDateAsync(It.IsAny<DateTime>()))
             .ReturnsAsync(bookings);
 
-        var plugin = new BookingPlugin(_mockService.Object);
+        var sessionContext = new SessionContext();
+        var plugin = new BookingPlugin(_mockService.Object, sessionContext);
 
         var result = await plugin.GetAllAppointmentsByDate();
 
@@ -53,31 +55,7 @@ public class BookingPluginSecurityTests
     }
 
     [Fact]
-    public async Task GetAppointmentInfo_WithWrongName_ShouldDenyAccess()
-    {
-        var booking = new BookingRecord
-        {
-            ConfirmationCode = "ABC123",
-            ClientName = "Juan Pérez",
-            ProviderName = "Dr. Ramírez",
-            ScheduledDate = DateTime.Today,
-            ScheduledTime = new TimeSpan(10, 0, 0)
-        };
-
-        _mockService.Setup(s => s.GetBookingAsync("ABC123"))
-            .ReturnsAsync(booking);
-
-        var plugin = new BookingPlugin(_mockService.Object);
-
-        // Nombre incorrecto
-        var result = await plugin.GetAppointmentInfo("ABC123", "Carlos García");
-
-        Assert.Contains("No se puede verificar la identidad", result);
-        Assert.DoesNotContain("Juan Pérez", result);
-    }
-
-    [Fact]
-    public async Task GetAppointmentInfo_WithCorrectName_ShouldAllowAccess()
+    public async Task GetAppointmentInfo_WithoutValidation_ShouldDenyAccess()
     {
         var booking = new BookingRecord
         {
@@ -86,16 +64,44 @@ public class BookingPluginSecurityTests
             ProviderName = "Dr. Ramírez",
             ScheduledDate = DateTime.Today,
             ScheduledTime = new TimeSpan(10, 0, 0),
-            Status = BookingStatus.Scheduled
+            CustomFields = new Dictionary<string, object> { ["patientId"] = "CC-123456" }
         };
 
         _mockService.Setup(s => s.GetBookingAsync("ABC123"))
             .ReturnsAsync(booking);
 
-        var plugin = new BookingPlugin(_mockService.Object);
+        // SessionContext sin validar → debería denegar acceso
+        var sessionContext = new SessionContext();
+        var plugin = new BookingPlugin(_mockService.Object, sessionContext);
 
-        // Nombre parcial correcto (verificación case-insensitive)
-        var result = await plugin.GetAppointmentInfo("ABC123", "juan");
+        var result = await plugin.GetAppointmentInfo(confirmationCode: "ABC123");
+
+        Assert.Contains("ACCESO DENEGADO", result);
+        Assert.DoesNotContain("Juan Pérez", result);
+    }
+
+    [Fact]
+    public async Task GetAppointmentInfo_WithValidatedPatientId_ShouldAllowAccess()
+    {
+        var booking = new BookingRecord
+        {
+            ConfirmationCode = "ABC123",
+            ClientName = "Juan Pérez",
+            ProviderName = "Dr. Ramírez",
+            ScheduledDate = DateTime.Today,
+            ScheduledTime = new TimeSpan(10, 0, 0),
+            Status = BookingStatus.Scheduled,
+            CustomFields = new Dictionary<string, object> { ["patientId"] = "CC-123456" }
+        };
+
+        _mockService.Setup(s => s.GetBookingAsync("ABC123"))
+            .ReturnsAsync(booking);
+
+        // Pre-validar por código + patientId
+        var sessionContext = new SessionContext();
+        var plugin = new BookingPlugin(_mockService.Object, sessionContext);
+
+        var result = await plugin.GetAppointmentInfo(confirmationCode: "ABC123", patientId: "CC-123456");
 
         Assert.Contains("Juan Pérez", result);
         Assert.Contains("Dr. Ramírez", result);
