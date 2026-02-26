@@ -7,6 +7,7 @@ using ClinicSimulator.Core.Models;
 using ClinicSimulator.Core.Repositories;
 using ClinicSimulator.Core.Security;
 using ClinicSimulator.Core.Services;
+using ClinicSimulator.Core.Session;
 using ClinicSimulator.Core.Tenant;
 using Microsoft.SemanticKernel;
 
@@ -71,6 +72,7 @@ builder.Services.AddSingleton<IAuditLogger, InMemoryAuditLogger>();
 
 // Scoped: resuelto por request via middleware
 builder.Services.AddScoped<TenantContext>();
+builder.Services.AddScoped<ISessionContext, SessionContext>();
 
 // IClientDataAdapter scoped: creado per-tenant via factory
 builder.Services.AddScoped<IClientDataAdapter>(sp =>
@@ -105,7 +107,8 @@ builder.Services.AddScoped<Kernel>(sp =>
     var bookingService = sp.GetRequiredService<IBookingService>();
     var adapter = sp.GetRequiredService<IClientDataAdapter>();
     var tenantContext = sp.GetRequiredService<TenantContext>();
-    kernel.Plugins.AddFromObject(new BookingPlugin(bookingService), "BookingPlugin");
+    var sessionContext = sp.GetRequiredService<ISessionContext>();
+    kernel.Plugins.AddFromObject(new BookingPlugin(bookingService, sessionContext), "BookingPlugin");
     kernel.Plugins.AddFromObject(new BusinessInfoPlugin(adapter, tenantContext), "BusinessInfoPlugin");
 
     return kernel;
@@ -124,6 +127,9 @@ app.UseHttpsRedirection();
 
 // Tenant resolution middleware (antes de controllers)
 app.UseMiddleware<TenantMiddleware>();
+
+// Session context middleware (después de tenant)
+app.UseMiddleware<SessionContextMiddleware>();
 
 app.UseAuthorization();
 
