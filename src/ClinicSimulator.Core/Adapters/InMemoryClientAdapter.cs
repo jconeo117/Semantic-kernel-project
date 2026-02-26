@@ -77,6 +77,27 @@ public class InMemoryClientAdapter : IClientDataAdapter
         return Task.FromResult(exists);
     }
 
+    // === Patient Lookups ===
+
+    public Task<BookingRecord?> GetBookingByPatientIdAsync(string patientId)
+    {
+        var booking = _bookings.Values.FirstOrDefault(b =>
+            b.CustomFields.TryGetValue("patientId", out var pid) &&
+            pid?.ToString()?.Equals(patientId, StringComparison.OrdinalIgnoreCase) == true &&
+            b.Status != BookingStatus.Cancelled);
+        return Task.FromResult(booking);
+    }
+
+    public Task<List<BookingRecord>> GetBookingsByPatientIdAsync(string patientId)
+    {
+        var bookings = _bookings.Values
+            .Where(b =>
+                b.CustomFields.TryGetValue("patientId", out var pid) &&
+                pid?.ToString()?.Equals(patientId, StringComparison.OrdinalIgnoreCase) == true)
+            .ToList();
+        return Task.FromResult(bookings);
+    }
+
     // === Service Providers ===
 
     public Task<List<ServiceProvider>> GetAllProvidersAsync()

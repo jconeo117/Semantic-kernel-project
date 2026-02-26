@@ -99,6 +99,16 @@ public class BookingService : IBookingService
         return await _adapter.GetBookingsByDateAsync(date);
     }
 
+    public async Task<BookingRecord?> GetBookingByPatientIdAsync(string patientId)
+    {
+        return await _adapter.GetBookingByPatientIdAsync(patientId);
+    }
+
+    public async Task<List<BookingRecord>> GetBookingsByPatientIdAsync(string patientId)
+    {
+        return await _adapter.GetBookingsByPatientIdAsync(patientId);
+    }
+
     public async Task<List<ServiceProvider>> GetAllProvidersAsync()
     {
         return await _adapter.GetAllProvidersAsync();

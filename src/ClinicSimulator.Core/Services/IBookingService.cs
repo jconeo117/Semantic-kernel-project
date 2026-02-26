@@ -15,6 +15,10 @@ public interface IBookingService
     Task<BookingRecord?> GetBookingAsync(string confirmationCode);
     Task<List<BookingRecord>> GetBookingsByDateAsync(DateTime date);
 
+    // Patient lookups
+    Task<BookingRecord?> GetBookingByPatientIdAsync(string patientId);
+    Task<List<BookingRecord>> GetBookingsByPatientIdAsync(string patientId);
+
     Task<List<ServiceProvider>> GetAllProvidersAsync();
     Task<List<ServiceProvider>> SearchProvidersAsync(string query);
 }

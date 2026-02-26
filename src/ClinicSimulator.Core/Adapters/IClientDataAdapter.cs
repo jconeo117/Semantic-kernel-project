@@ -18,6 +18,10 @@ public interface IClientDataAdapter
     Task<bool> DeleteBookingAsync(string id);
     Task<bool> ExistsAsync(DateTime date, TimeSpan time, string providerId);
 
+    // === Patient Lookups ===
+    Task<BookingRecord?> GetBookingByPatientIdAsync(string patientId);
+    Task<List<BookingRecord>> GetBookingsByPatientIdAsync(string patientId);
+
     // === Service Providers ===
     Task<List<ServiceProvider>> GetAllProvidersAsync();
     Task<List<ServiceProvider>> SearchProvidersAsync(string query);
