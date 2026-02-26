@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using ClinicSimulator.Core.Services;
 using ClinicSimulator.Core.Models;
+using ClinicSimulator.Core.Session;
 using Microsoft.SemanticKernel;
 
 namespace ClinicSimulator.AI.Plugins;
@@ -8,10 +9,12 @@ namespace ClinicSimulator.AI.Plugins;
 public class BookingPlugin
 {
     private readonly IBookingService _bookingService;
+    private readonly ISessionContext _sessionContext;
 
-    public BookingPlugin(IBookingService bookingService)
+    public BookingPlugin(IBookingService bookingService, ISessionContext sessionContext)
     {
         _bookingService = bookingService;
+        _sessionContext = sessionContext;
     }
 
     [KernelFunction]
@@ -92,9 +95,10 @@ public class BookingPlugin
     }
 
     [KernelFunction]
-    [Description("Agenda una nueva cita. Si faltan datos, devuelve un error descriptivo.")]
+    [Description("Agenda una nueva cita. Si faltan datos, devuelve un error descriptivo. El documento de identidad del paciente es OBLIGATORIO.")]
     public async Task<string> BookAppointment(
         [Description("Nombre completo del cliente")] string clientName,
+        [Description("Documento de identidad del paciente (cédula, DNI, etc.) - REQUERIDO")] string patientId,
         [Description("Telefono celular del cliente")] string clientPhone,
         [Description("Correo electronico del cliente (Opcional, usar 'no-email' si no se tiene)")] string clientEmail,
         [Description("Nombre del proveedor (ej: 'Dr. Ramírez') o ID (ej: 'DR001')")] string providerNameOrId,
@@ -102,10 +106,13 @@ public class BookingPlugin
         [Description("Horario para agendar la cita. Formato 24 horas HH:MM")] string stringTime,
         [Description("Razon de la cita")] string reason)
     {
-        var invalidTerms = new[] { "no email", "no-email", "unknown", "no nombre", "string", "user", "no phone" };
+        var invalidTerms = new[] { "no email", "no-email", "unknown", "no nombre", "string", "user", "no phone", "no-id", "no id" };
 
         if (string.IsNullOrWhiteSpace(clientName) || invalidTerms.Any(t => clientName.Contains(t, StringComparison.OrdinalIgnoreCase)))
             return "FALLO DE VALIDACIÓN: Falta el NOMBRE del cliente. NO inventes valores. PREGUNTA al usuario su nombre.";
+
+        if (string.IsNullOrWhiteSpace(patientId) || invalidTerms.Any(t => patientId.Contains(t, StringComparison.OrdinalIgnoreCase)))
+            return "FALLO DE VALIDACIÓN: Falta el DOCUMENTO DE IDENTIDAD del paciente. PREGUNTA al usuario su cédula o documento.";
 
         if (string.IsNullOrWhiteSpace(clientEmail) || !clientEmail.Contains('@') || invalidTerms.Any(t => clientEmail.Contains(t, StringComparison.OrdinalIgnoreCase)))
             return "FALLO DE VALIDACIÓN: Falta un EMAIL válido. NO uses 'no-email'. PREGUNTA al usuario su correo.";
@@ -136,6 +143,7 @@ public class BookingPlugin
 
             var customFields = new Dictionary<string, object>
             {
+                ["patientId"] = patientId,
                 ["phone"] = clientPhone,
                 ["email"] = clientEmail,
                 ["reason"] = reason
@@ -150,9 +158,14 @@ public class BookingPlugin
 
             if (booking != null)
             {
+                // Auto-validar en el contexto de sesión
+                _sessionContext.ValidatePatientId(patientId);
+                _sessionContext.ValidateConfirmationCode(booking.ConfirmationCode);
+
                 return $"ÉXITO: Cita confirmada exitosamente. \n" +
                        $"Código de Confirmación: {booking.ConfirmationCode} \n" +
                        $"Cliente: {clientName} \n" +
+                       $"Documento: {patientId} \n" +
                        $"Proveedor: {provider.Name} ({provider.Role})\n" +
                        $"Fecha: {date:yyyy-MM-dd} a las {time} \n" +
                        $"INSTRUCCIÓN PARA EL AGENTE: Informa al usuario el código de confirmación y recuérdale llegar 15 minutos antes.";
@@ -167,13 +180,22 @@ public class BookingPlugin
     }
 
     [KernelFunction]
-    [Description("Cancelar una cita mediante codigo de confirmacion.")]
+    [Description("Cancelar una cita. Requiere verificación de identidad: el paciente debe haber sido validado previamente en esta sesión.")]
     public async Task<string> CancelAppointment(
         [Description("Codigo de confirmacion de la cita")] string confirmationCode)
     {
         var booking = await _bookingService.GetBookingAsync(confirmationCode);
         if (booking == null)
             return $"La cita con el código {confirmationCode} no fue encontrada, pruebe nuevamente.";
+
+        // Verificar ownership: debe tener el código validado o el patientId validado
+        var patientId = booking.CustomFields.TryGetValue("patientId", out var pid) ? pid?.ToString() : null;
+        if (!_sessionContext.IsCodeValidated(confirmationCode) &&
+            (patientId == null || !_sessionContext.IsPatientValidated(patientId)))
+        {
+            return "ACCESO DENEGADO: No se puede cancelar esta cita. " +
+                   "Primero debe verificar su identidad proporcionando su documento de identidad o código de confirmación.";
+        }
 
         var success = await _bookingService.CancelBookingAsync(confirmationCode);
 
@@ -185,21 +207,55 @@ public class BookingPlugin
     }
 
     [KernelFunction]
-    [Description("Obtener informacion de una cita. Requiere código Y nombre del cliente para verificación.")]
+    [Description("Obtener información de una cita. Se puede buscar por código de confirmación O por documento de identidad del paciente. Requiere verificación de ownership.")]
     public async Task<string> GetAppointmentInfo(
-        [Description("Codigo de confirmacion de la cita")] string confirmationCode,
-        [Description("Nombre del cliente para verificación de identidad")] string clientName)
+        [Description("Código de confirmación de la cita (opcional si se proporciona documento)")] string confirmationCode = "",
+        [Description("Documento de identidad del paciente (opcional si se proporciona código)")] string patientId = "")
     {
-        var booking = await _bookingService.GetBookingAsync(confirmationCode);
-        if (booking == null)
-            return $"La cita con el código {confirmationCode} no fue encontrada, pruebe nuevamente.";
+        BookingRecord? booking = null;
 
-        // Verificación de identidad: el nombre debe coincidir
-        if (string.IsNullOrWhiteSpace(clientName) ||
-            !booking.ClientName.Contains(clientName.Trim(), StringComparison.OrdinalIgnoreCase))
+        // Buscar por código de confirmación
+        if (!string.IsNullOrWhiteSpace(confirmationCode))
         {
-            return "No se puede verificar la identidad. El nombre proporcionado no coincide con el registro. " +
-                   "Por favor, confirme el nombre completo asociado a esta cita.";
+            booking = await _bookingService.GetBookingAsync(confirmationCode);
+            if (booking == null)
+                return $"La cita con el código {confirmationCode} no fue encontrada, pruebe nuevamente.";
+
+            // Validar ownership: por código o por patientId en sesión
+            var bookingPatientId = booking.CustomFields.TryGetValue("patientId", out var pid) ? pid?.ToString() : null;
+
+            if (!_sessionContext.IsCodeValidated(confirmationCode) &&
+                (bookingPatientId == null || !_sessionContext.IsPatientValidated(bookingPatientId)))
+            {
+                // Auto-validar si el usuario proporciona un patientId correcto
+                if (!string.IsNullOrWhiteSpace(patientId) &&
+                    bookingPatientId != null &&
+                    patientId.Equals(bookingPatientId, StringComparison.OrdinalIgnoreCase))
+                {
+                    _sessionContext.ValidatePatientId(patientId);
+                    _sessionContext.ValidateConfirmationCode(confirmationCode);
+                }
+                else
+                {
+                    return "ACCESO DENEGADO: No se puede verificar la identidad. " +
+                           "Proporcione su documento de identidad para verificar que esta cita le pertenece.";
+                }
+            }
+        }
+        // Buscar por documento de identidad
+        else if (!string.IsNullOrWhiteSpace(patientId))
+        {
+            booking = await _bookingService.GetBookingByPatientIdAsync(patientId);
+            if (booking == null)
+                return $"No se encontraron citas asociadas al documento {patientId}.";
+
+            // Auto-validar el patientId y el código
+            _sessionContext.ValidatePatientId(patientId);
+            _sessionContext.ValidateConfirmationCode(booking.ConfirmationCode);
+        }
+        else
+        {
+            return "FALLO DE VALIDACIÓN: Debe proporcionar un código de confirmación O un documento de identidad.";
         }
 
         return $"Cita {booking.ConfirmationCode}:\n" +
