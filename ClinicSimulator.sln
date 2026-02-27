@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClinicSimulator.Tests", "sr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClinicSimulator.Api", "src\ClinicSimulator.Api\ClinicSimulator.Api.csproj", "{15940CEB-EE29-460A-821A-32FCC726D580}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClinicSimulator.Connectors", "src\ClinicSimulator.Connectors\ClinicSimulator.Connectors.csproj", "{09946807-58F2-4294-BC54-2DC2F3A68F4C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -71,6 +73,18 @@ Global
 		{15940CEB-EE29-460A-821A-32FCC726D580}.Release|x64.Build.0 = Release|Any CPU
 		{15940CEB-EE29-460A-821A-32FCC726D580}.Release|x86.ActiveCfg = Release|Any CPU
 		{15940CEB-EE29-460A-821A-32FCC726D580}.Release|x86.Build.0 = Release|Any CPU
+		{09946807-58F2-4294-BC54-2DC2F3A68F4C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{09946807-58F2-4294-BC54-2DC2F3A68F4C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{09946807-58F2-4294-BC54-2DC2F3A68F4C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{09946807-58F2-4294-BC54-2DC2F3A68F4C}.Debug|x64.Build.0 = Debug|Any CPU
+		{09946807-58F2-4294-BC54-2DC2F3A68F4C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{09946807-58F2-4294-BC54-2DC2F3A68F4C}.Debug|x86.Build.0 = Debug|Any CPU
+		{09946807-58F2-4294-BC54-2DC2F3A68F4C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{09946807-58F2-4294-BC54-2DC2F3A68F4C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{09946807-58F2-4294-BC54-2DC2F3A68F4C}.Release|x64.ActiveCfg = Release|Any CPU
+		{09946807-58F2-4294-BC54-2DC2F3A68F4C}.Release|x64.Build.0 = Release|Any CPU
+		{09946807-58F2-4294-BC54-2DC2F3A68F4C}.Release|x86.ActiveCfg = Release|Any CPU
+		{09946807-58F2-4294-BC54-2DC2F3A68F4C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -80,5 +94,6 @@ Global
 		{502664AE-C1C2-466C-8EE1-64504109C33F} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{F7AEB99E-2CBF-4F88-A669-7E022A153A81} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{15940CEB-EE29-460A-821A-32FCC726D580} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{09946807-58F2-4294-BC54-2DC2F3A68F4C} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

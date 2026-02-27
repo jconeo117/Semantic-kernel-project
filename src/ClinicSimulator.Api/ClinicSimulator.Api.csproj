@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ClinicSimulator.Core\ClinicSimulator.Core.csproj" />
     <ProjectReference Include="..\ClinicSimulator.AI\ClinicSimulator.AI.csproj" />
+    <ProjectReference Include="..\ClinicSimulator.Connectors\ClinicSimulator.Connectors.csproj" />
   </ItemGroup>
 
   <ItemGroup>
