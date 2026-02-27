@@ -1,0 +1,101 @@
+{
+  "_comment": "Ejemplos de configuración de conectores por tenant. Se agregan dentro de la sección 'Connector' de cada tenant en appsettings.json.",
+
+  "examples": {
+    "1_InMemory_Default": {
+      "_description": "Conector en memoria. No requiere connection string ni field mappings. Ideal para testing y demos.",
+      "Connector": {
+        "Type": "InMemory"
+      }
+    },
+
+    "2_SqlServer_Clinica": {
+      "_description": "Clínica oftalmológica con esquema SQL en español. Tablas: dbo.citas, dbo.doctores.",
+      "_connectionString_format": "Server={host};Database={db};User Id={user};Password={pass};TrustServerCertificate=true;",
+      "Connector": {
+        "Type": "SqlServer",
+        "ConnectionString": "Server=localhost;Database=ClinicaVistaClaraDB;User Id=sa;Password=YourPassword123;TrustServerCertificate=true;",
+        "Settings": {
+          "CommandTimeout": "30",
+          "MaxRetries": "3"
+        },
+        "FieldMappings": {
+          "BookingsTableName": "dbo.citas",
+          "ProvidersTableName": "dbo.doctores",
+          "BookingFieldMappings": {
+            "Id": "id_cita",
+            "TenantId": "id_clinica",
+            "ConfirmationCode": "codigo_confirmacion",
+            "ClientName": "nombre_paciente",
+            "ProviderId": "id_doctor",
+            "ProviderName": "nombre_doctor",
+            "ScheduledDate": "fecha_cita",
+            "ScheduledTime": "hora_cita",
+            "Status": "estado",
+            "CreatedAt": "fecha_creacion",
+            "UpdatedAt": "fecha_actualizacion"
+          },
+          "ProviderFieldMappings": {
+            "Id": "id_doctor",
+            "TenantId": "id_clinica",
+            "Name": "nombre_completo",
+            "Role": "especialidad",
+            "WorkingDays": "dias_laborales",
+            "StartTime": "hora_inicio",
+            "EndTime": "hora_fin",
+            "SlotDurationMinutes": "duracion_cita_min",
+            "IsAvailable": "activo"
+          },
+          "CustomFieldMappings": {
+            "patientId": "documento_paciente",
+            "phone": "telefono",
+            "email": "correo_electronico",
+            "reason": "motivo_consulta",
+            "insurance": "eps"
+          }
+        }
+      }
+    },
+
+    "3_SqlServer_Salon": {
+      "_description": "Salón de belleza con esquema en inglés. Tablas: appointments, stylists.",
+      "Connector": {
+        "Type": "SqlServer",
+        "ConnectionString": "Server=db.salon.local;Database=SalonBellaDB;User Id=app_user;Password=SecurePass!;TrustServerCertificate=true;",
+        "FieldMappings": {
+          "BookingsTableName": "appointments",
+          "ProvidersTableName": "stylists",
+          "BookingFieldMappings": {
+            "Id": "appointment_id",
+            "TenantId": "salon_id",
+            "ConfirmationCode": "booking_code",
+            "ClientName": "customer_name",
+            "ProviderId": "stylist_id",
+            "ProviderName": "stylist_name",
+            "ScheduledDate": "appointment_date",
+            "ScheduledTime": "appointment_time",
+            "Status": "status",
+            "CreatedAt": "created_date",
+            "UpdatedAt": "modified_date"
+          },
+          "ProviderFieldMappings": {
+            "Id": "stylist_id",
+            "Name": "full_name",
+            "Role": "specialty",
+            "WorkingDays": "work_days",
+            "StartTime": "shift_start",
+            "EndTime": "shift_end",
+            "SlotDurationMinutes": "service_duration",
+            "IsAvailable": "is_active"
+          },
+          "CustomFieldMappings": {
+            "patientId": "customer_doc",
+            "phone": "phone_number",
+            "email": "email",
+            "reason": "service_notes"
+          }
+        }
+      }
+    }
+  }
+}
