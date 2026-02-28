@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
@@ -21,9 +21,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ClinicSimulator.Core\ClinicSimulator.Core.csproj" />
-    <ProjectReference Include="..\ClinicSimulator.AI\ClinicSimulator.AI.csproj" />
-    <ProjectReference Include="..\ClinicSimulator.Api\ClinicSimulator.Api.csproj" />
+    <ProjectReference Include="..\ReceptionistAgent.Core\ReceptionistAgent.Core.csproj" />
+    <ProjectReference Include="..\ReceptionistAgent.AI\ReceptionistAgent.AI.csproj" />
+    <ProjectReference Include="..\ReceptionistAgent.Api\ReceptionistAgent.Api.csproj" />
   </ItemGroup>
 
 </Project>

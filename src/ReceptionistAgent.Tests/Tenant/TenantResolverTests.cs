@@ -1,8 +1,8 @@
-using ClinicSimulator.Core.Models;
-using ClinicSimulator.Core.Tenant;
+using ReceptionistAgent.Core.Models;
+using ReceptionistAgent.Core.Tenant;
 using Xunit;
 
-namespace ClinicSimulator.Tests.Tenant;
+namespace ReceptionistAgent.Tests.Tenant;
 
 public class TenantResolverTests
 {

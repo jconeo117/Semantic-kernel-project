@@ -1,7 +1,7 @@
-using ClinicSimulator.Core.Security;
+using ReceptionistAgent.Core.Security;
 using Xunit;
 
-namespace ClinicSimulator.Tests.Security;
+namespace ReceptionistAgent.Tests.Security;
 
 public class SensitiveDataFilterTests
 {

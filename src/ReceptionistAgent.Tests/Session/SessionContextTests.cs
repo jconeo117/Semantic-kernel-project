@@ -1,24 +1,24 @@
-using ClinicSimulator.AI.Plugins;
-using ClinicSimulator.Core.Adapters;
-using ClinicSimulator.Core.Models;
-using ClinicSimulator.Core.Services;
-using ClinicSimulator.Core.Session;
+using ReceptionistAgent.AI.Plugins;
+using ReceptionistAgent.Core.Adapters;
+using ReceptionistAgent.Core.Models;
+using ReceptionistAgent.Core.Services;
+using ReceptionistAgent.Core.Session;
 using Xunit;
 
-namespace ClinicSimulator.Tests.Session;
+namespace ReceptionistAgent.Tests.Session;
 
 public class SessionContextTests
 {
     private readonly SessionContext _sessionContext = new();
 
-    // ===== Test 1: Validate patient by document ID =====
+    // ===== Test 1: Validate client by document ID =====
     [Fact]
-    public void ValidatePatientId_ShouldTrackInSession()
+    public void ValidateClientId_ShouldTrackInSession()
     {
-        _sessionContext.ValidatePatientId("CC-123456");
+        _sessionContext.ValidateClientId("CC-123456");
 
-        Assert.Equal("CC-123456", _sessionContext.ValidatedPatientId);
-        Assert.True(_sessionContext.IsPatientValidated("CC-123456"));
+        Assert.Equal("CC-123456", _sessionContext.ValidatedClientId);
+        Assert.True(_sessionContext.IsClientValidated("CC-123456"));
     }
 
     // ===== Test 2: Validate booking by confirmation code =====
@@ -31,12 +31,12 @@ public class SessionContextTests
         Assert.Contains("CITA-AB12", _sessionContext.ValidatedConfirmationCodes);
     }
 
-    // ===== Test 3: Reject access when patientId not validated =====
+    // ===== Test 3: Reject access when clientId not validated =====
     [Fact]
-    public void IsPatientValidated_WithoutValidation_ShouldReturnFalse()
+    public void IsClientValidated_WithoutValidation_ShouldReturnFalse()
     {
-        Assert.False(_sessionContext.IsPatientValidated("CC-999999"));
-        Assert.Null(_sessionContext.ValidatedPatientId);
+        Assert.False(_sessionContext.IsClientValidated("CC-999999"));
+        Assert.Null(_sessionContext.ValidatedClientId);
     }
 
     // ===== Test 4: Reject access when confirmation code not validated =====
@@ -51,19 +51,19 @@ public class SessionContextTests
     [Fact]
     public void MultipleValidations_ShouldAccumulateInSession()
     {
-        _sessionContext.ValidatePatientId("CC-111111");
+        _sessionContext.ValidateClientId("CC-111111");
         _sessionContext.ValidateConfirmationCode("CITA-AA11");
         _sessionContext.ValidateConfirmationCode("CITA-BB22");
 
-        Assert.True(_sessionContext.IsPatientValidated("CC-111111"));
+        Assert.True(_sessionContext.IsClientValidated("CC-111111"));
         Assert.True(_sessionContext.IsCodeValidated("CITA-AA11"));
         Assert.True(_sessionContext.IsCodeValidated("CITA-BB22"));
         Assert.Equal(2, _sessionContext.ValidatedConfirmationCodes.Count);
     }
 
-    // ===== Test 6: GetBookingByPatientIdAsync returns matching booking =====
+    // ===== Test 6: GetBookingByClientIdAsync returns matching booking =====
     [Fact]
-    public async Task GetBookingByPatientIdAsync_ShouldReturnMatchingBooking()
+    public async Task GetBookingByClientIdAsync_ShouldReturnMatchingBooking()
     {
         var providers = new List<ServiceProvider>
         {
@@ -82,18 +82,18 @@ public class SessionContextTests
 
         var booking = await service.CreateBookingAsync(
             "Juan Pérez", "DR001", tomorrow, TimeSpan.FromHours(10),
-            new Dictionary<string, object> { ["patientId"] = "CC-123456" });
+            new Dictionary<string, object> { ["clientId"] = "CC-123456" });
 
-        var found = await service.GetBookingByPatientIdAsync("CC-123456");
+        var found = await service.GetBookingByClientIdAsync("CC-123456");
 
         Assert.NotNull(found);
         Assert.Equal(booking.ConfirmationCode, found.ConfirmationCode);
         Assert.Equal("Juan Pérez", found.ClientName);
     }
 
-    // ===== Test 7: GetBookingsByPatientIdAsync returns all patient bookings =====
+    // ===== Test 7: GetBookingsByClientIdAsync returns all client bookings =====
     [Fact]
-    public async Task GetBookingsByPatientIdAsync_ShouldReturnAllPatientBookings()
+    public async Task GetBookingsByClientIdAsync_ShouldReturnAllClientBookings()
     {
         var providers = new List<ServiceProvider>
         {
@@ -115,24 +115,24 @@ public class SessionContextTests
 
         await service.CreateBookingAsync(
             "Juan Pérez", "DR001", day1, TimeSpan.FromHours(10),
-            new Dictionary<string, object> { ["patientId"] = "CC-123456" });
+            new Dictionary<string, object> { ["clientId"] = "CC-123456" });
         await service.CreateBookingAsync(
             "Juan Pérez", "DR001", day2, TimeSpan.FromHours(11),
-            new Dictionary<string, object> { ["patientId"] = "CC-123456" });
+            new Dictionary<string, object> { ["clientId"] = "CC-123456" });
         await service.CreateBookingAsync(
             "María López", "DR001", day1, TimeSpan.FromHours(14),
-            new Dictionary<string, object> { ["patientId"] = "CC-999999" });
+            new Dictionary<string, object> { ["clientId"] = "CC-999999" });
 
-        var juanBookings = await service.GetBookingsByPatientIdAsync("CC-123456");
-        var mariaBookings = await service.GetBookingsByPatientIdAsync("CC-999999");
+        var juanBookings = await service.GetBookingsByClientIdAsync("CC-123456");
+        var mariaBookings = await service.GetBookingsByClientIdAsync("CC-999999");
 
         Assert.Equal(2, juanBookings.Count);
         Assert.Single(mariaBookings);
     }
 
-    // ===== Test 8: BookAppointment stores patientId and auto-validates session =====
+    // ===== Test 8: BookAppointment stores clientId and auto-validates session =====
     [Fact]
-    public async Task BookAppointment_ShouldStorePatientIdAndAutoValidate()
+    public async Task BookAppointment_ShouldStoreclientIdAndAutoValidate()
     {
         var providers = new List<ServiceProvider>
         {
@@ -154,7 +154,7 @@ public class SessionContextTests
 
         var result = await plugin.BookAppointment(
             clientName: "Juan Pérez",
-            patientId: "CC-123456",
+            clientId: "CC-123456",
             clientPhone: "3001234567",
             clientEmail: "juan@test.com",
             providerNameOrId: "Ramírez",
@@ -166,7 +166,7 @@ public class SessionContextTests
         Assert.Contains("CC-123456", result);
 
         // Verificar que el sessionContext fue auto-validado
-        Assert.True(sessionContext.IsPatientValidated("CC-123456"));
+        Assert.True(sessionContext.IsClientValidated("CC-123456"));
         Assert.NotEmpty(sessionContext.ValidatedConfirmationCodes);
     }
 
@@ -191,7 +191,7 @@ public class SessionContextTests
 
         var booking = await service.CreateBookingAsync(
             "Juan Pérez", "DR001", tomorrow, TimeSpan.FromHours(10),
-            new Dictionary<string, object> { ["patientId"] = "CC-123456" });
+            new Dictionary<string, object> { ["clientId"] = "CC-123456" });
 
         // Usar un SessionContext NUEVO (sin validación previa)
         var sessionContext = new SessionContext();
@@ -202,14 +202,14 @@ public class SessionContextTests
         Assert.Contains("ACCESO DENEGADO", result);
     }
 
-    // ===== Test 10: PatientId validation is case-insensitive =====
+    // ===== Test 10: clientId validation is case-insensitive =====
     [Fact]
-    public void PatientIdValidation_ShouldBeCaseInsensitive()
+    public void clientIdValidation_ShouldBeCaseInsensitive()
     {
-        _sessionContext.ValidatePatientId("cc-123456");
+        _sessionContext.ValidateClientId("cc-123456");
 
-        Assert.True(_sessionContext.IsPatientValidated("CC-123456"));
-        Assert.True(_sessionContext.IsPatientValidated("cc-123456"));
-        Assert.True(_sessionContext.IsPatientValidated("Cc-123456"));
+        Assert.True(_sessionContext.IsClientValidated("CC-123456"));
+        Assert.True(_sessionContext.IsClientValidated("cc-123456"));
+        Assert.True(_sessionContext.IsClientValidated("Cc-123456"));
     }
 }

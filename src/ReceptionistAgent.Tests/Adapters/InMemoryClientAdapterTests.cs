@@ -1,8 +1,8 @@
-using ClinicSimulator.Core.Adapters;
-using ClinicSimulator.Core.Models;
+using ReceptionistAgent.Core.Adapters;
+using ReceptionistAgent.Core.Models;
 using Xunit;
 
-namespace ClinicSimulator.Tests.Adapters;
+namespace ReceptionistAgent.Tests.Adapters;
 
 public class InMemoryClientAdapterTests
 {

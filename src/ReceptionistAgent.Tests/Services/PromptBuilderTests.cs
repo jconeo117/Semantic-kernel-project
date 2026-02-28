@@ -1,8 +1,8 @@
-using ClinicSimulator.Core.Models;
-using ClinicSimulator.Core.Services;
+using ReceptionistAgent.Core.Models;
+using ReceptionistAgent.Core.Services;
 using Xunit;
 
-namespace ClinicSimulator.Tests.Services;
+namespace ReceptionistAgent.Tests.Services;
 
 public class PromptBuilderTests
 {

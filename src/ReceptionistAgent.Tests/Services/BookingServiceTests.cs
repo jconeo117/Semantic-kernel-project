@@ -1,10 +1,10 @@
-using ClinicSimulator.Core.Adapters;
-using ClinicSimulator.Core.Models;
-using ClinicSimulator.Core.Services;
+using ReceptionistAgent.Core.Adapters;
+using ReceptionistAgent.Core.Models;
+using ReceptionistAgent.Core.Services;
 using Moq;
 using Xunit;
 
-namespace ClinicSimulator.Tests.Services;
+namespace ReceptionistAgent.Tests.Services;
 
 public class BookingServiceTests
 {

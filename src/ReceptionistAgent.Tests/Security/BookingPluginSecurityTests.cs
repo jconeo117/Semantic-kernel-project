@@ -1,11 +1,11 @@
-using ClinicSimulator.AI.Plugins;
-using ClinicSimulator.Core.Models;
-using ClinicSimulator.Core.Services;
-using ClinicSimulator.Core.Session;
+using ReceptionistAgent.AI.Plugins;
+using ReceptionistAgent.Core.Models;
+using ReceptionistAgent.Core.Services;
+using ReceptionistAgent.Core.Session;
 using Moq;
 using Xunit;
 
-namespace ClinicSimulator.Tests.Security;
+namespace ReceptionistAgent.Tests.Security;
 
 public class BookingPluginSecurityTests
 {
@@ -64,7 +64,7 @@ public class BookingPluginSecurityTests
             ProviderName = "Dr. Ramírez",
             ScheduledDate = DateTime.Today,
             ScheduledTime = new TimeSpan(10, 0, 0),
-            CustomFields = new Dictionary<string, object> { ["patientId"] = "CC-123456" }
+            CustomFields = new Dictionary<string, object> { ["clientId"] = "CC-123456" }
         };
 
         _mockService.Setup(s => s.GetBookingAsync("ABC123"))
@@ -81,7 +81,7 @@ public class BookingPluginSecurityTests
     }
 
     [Fact]
-    public async Task GetAppointmentInfo_WithValidatedPatientId_ShouldAllowAccess()
+    public async Task GetAppointmentInfo_WithValidatedClientId_ShouldAllowAccess()
     {
         var booking = new BookingRecord
         {
@@ -91,17 +91,17 @@ public class BookingPluginSecurityTests
             ScheduledDate = DateTime.Today,
             ScheduledTime = new TimeSpan(10, 0, 0),
             Status = BookingStatus.Scheduled,
-            CustomFields = new Dictionary<string, object> { ["patientId"] = "CC-123456" }
+            CustomFields = new Dictionary<string, object> { ["clientId"] = "CC-123456" }
         };
 
         _mockService.Setup(s => s.GetBookingAsync("ABC123"))
             .ReturnsAsync(booking);
 
-        // Pre-validar por código + patientId
+        // Pre-validar por código + clientId
         var sessionContext = new SessionContext();
         var plugin = new BookingPlugin(_mockService.Object, sessionContext);
 
-        var result = await plugin.GetAppointmentInfo(confirmationCode: "ABC123", patientId: "CC-123456");
+        var result = await plugin.GetAppointmentInfo(confirmationCode: "ABC123", clientId: "CC-123456");
 
         Assert.Contains("Juan Pérez", result);
         Assert.Contains("Dr. Ramírez", result);

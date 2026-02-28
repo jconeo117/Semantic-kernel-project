@@ -1,8 +1,8 @@
-using ClinicSimulator.Core.Models;
-using ClinicSimulator.Core.Security;
+using ReceptionistAgent.Core.Models;
+using ReceptionistAgent.Core.Security;
 using Xunit;
 
-namespace ClinicSimulator.Tests.Security;
+namespace ReceptionistAgent.Tests.Security;
 
 public class AuditLoggerTests
 {

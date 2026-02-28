@@ -4,7 +4,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
-namespace ClinicSimulator.Tests.Integration;
+namespace ReceptionistAgent.Tests.Integration;
 
 public class TenantMiddlewareIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
 {

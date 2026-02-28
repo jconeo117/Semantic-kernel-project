@@ -1,10 +1,10 @@
-using ClinicSimulator.AI.Plugins;
-using ClinicSimulator.Core.Adapters;
-using ClinicSimulator.Core.Models;
+using ReceptionistAgent.AI.Plugins;
+using ReceptionistAgent.Core.Adapters;
+using ReceptionistAgent.Core.Models;
 using Moq;
 using Xunit;
 
-namespace ClinicSimulator.Tests.Plugins;
+namespace ReceptionistAgent.Tests.Plugins;
 
 public class BusinessInfoPluginTests
 {
