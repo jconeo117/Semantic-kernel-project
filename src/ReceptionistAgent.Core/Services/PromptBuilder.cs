@@ -10,7 +10,17 @@ public class PromptBuilder : IPromptBuilder
 {
     public Task<string> BuildSystemPromptAsync(TenantConfiguration tenant, List<ServiceProvider> providers)
     {
-        var today = DateTime.Now;
+        var tzId = tenant.TimeZoneId ?? "UTC";
+        DateTime today;
+        try
+        {
+            var tzInfo = TimeZoneInfo.FindSystemTimeZoneById(tzId);
+            today = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tzInfo);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            today = DateTime.UtcNow;
+        }
         var providerList = string.Join("\n", providers.Select(p => $"- {p.Name} ({p.Role})"));
         var serviceList = tenant.Services.Any()
             ? string.Join("\n", tenant.Services.Select(s => $"- {s}"))

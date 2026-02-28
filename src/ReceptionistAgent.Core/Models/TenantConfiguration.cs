@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ReceptionistAgent.Core.Models;
 
 /// <summary>
@@ -9,7 +11,17 @@ namespace ReceptionistAgent.Core.Models;
 public class TenantConfiguration
 {
     public string TenantId { get; set; } = string.Empty;
+    [JsonPropertyName("businessName")]
     public string BusinessName { get; set; } = string.Empty;
+
+    [JsonPropertyName("timezoneId")]
+    public string TimeZoneId { get; set; } = "UTC"; // ID de zona horaria (ej: "SA Pacific Standard Time" o "America/Bogota" dependiedo del OS)
+
+    [JsonPropertyName("dbType")]
+    public string DbType { get; set; } = "InMemory"; // "InMemory", "SqlServer", etc.
+
+    [JsonPropertyName("connectionString")]
+    public string ConnectionString { get; set; } = string.Empty;
     public string BusinessType { get; set; } = string.Empty;  // "clinic", "salon", "workshop"
     public string Address { get; set; } = string.Empty;
     public string Phone { get; set; } = string.Empty;

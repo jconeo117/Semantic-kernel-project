@@ -25,7 +25,7 @@ public class InMemoryClientAdapter : IClientDataAdapter
     {
         booking.Id = Guid.NewGuid();
         booking.ConfirmationCode = $"CITA-{booking.Id.ToString()[..4].ToUpper()}";
-        booking.CreatedAt = DateTime.Now;
+        booking.CreatedAt = DateTime.UtcNow;
         _bookings.TryAdd(booking.Id, booking);
         return Task.FromResult(booking);
     }
@@ -54,7 +54,7 @@ public class InMemoryClientAdapter : IClientDataAdapter
         if (!_bookings.ContainsKey(booking.Id))
             return Task.FromResult(false);
 
-        booking.UpdatedAt = DateTime.Now;
+        booking.UpdatedAt = DateTime.UtcNow;
         _bookings[booking.Id] = booking;
         return Task.FromResult(true);
     }

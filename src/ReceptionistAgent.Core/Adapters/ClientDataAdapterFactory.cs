@@ -29,6 +29,14 @@ public class ClientDataAdapterFactory
             SlotDurationMinutes = p.SlotDurationMinutes
         }).ToList();
 
+        if (tenantConfig.DbType.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(tenantConfig.ConnectionString))
+                throw new InvalidOperationException($"Tenant '{tenantConfig.TenantId}' specified SqlServer but no ConnectionString was found.");
+
+            return new SqlClientDataAdapter(tenantConfig.ConnectionString, providers);
+        }
+
         return new InMemoryClientAdapter(providers);
     }
 }
