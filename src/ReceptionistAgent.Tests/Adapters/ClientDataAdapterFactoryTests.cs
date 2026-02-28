@@ -14,6 +14,48 @@ public class ClientDataAdapterFactoryTests
     }
 
     [Fact]
+    public void CreateAdapter_WithSqlServerDbType_ShouldReturnSqlClientDataAdapter()
+    {
+        // Arrange
+        var tenantConfig = new TenantConfiguration
+        {
+            TenantId = "TEST-TENANT",
+            DbType = "SqlServer",
+            ConnectionString = "Server=myServerAddress;Database=myDataBase;User Id=myUsername;Password=myPassword;",
+            Providers = new List<TenantProviderConfig>
+            {
+                new() { Id = "P1", Name = "Provider 1" }
+            }
+        };
+
+        // Act
+        var adapter = _factory.CreateAdapter(tenantConfig);
+
+        // Assert
+        Assert.IsType<SqlClientDataAdapter>(adapter);
+    }
+
+    [Fact]
+    public void CreateAdapter_WithSqlServerDbType_WithoutConnectionString_ShouldThrow()
+    {
+        // Arrange
+        var tenantConfig = new TenantConfiguration
+        {
+            TenantId = "TEST-TENANT",
+            DbType = "SqlServer",
+            ConnectionString = string.Empty, // Missing connection string
+            Providers = new List<TenantProviderConfig>
+            {
+                new() { Id = "P1", Name = "Provider 1" }
+            }
+        };
+
+        // Act & Assert
+        var ex = Assert.Throws<InvalidOperationException>(() => _factory.CreateAdapter(tenantConfig));
+        Assert.Contains("no ConnectionString was found", ex.Message);
+    }
+
+    [Fact]
     public async Task CreateAdapter_ShouldReturnAdapterWithTenantProviders()
     {
         var config = new TenantConfiguration
@@ -88,7 +130,7 @@ public class ClientDataAdapterFactoryTests
         {
             ClientName = "Client 1",
             ProviderId = "P1",
-            ScheduledDate = DateTime.Now.Date,
+            ScheduledDate = DateTime.UtcNow.Date,
             ScheduledTime = new TimeSpan(10, 0, 0)
         });
 

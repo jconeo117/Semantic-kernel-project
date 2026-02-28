@@ -145,7 +145,8 @@ public class SessionContextTests
         var adapter = new InMemoryClientAdapter(providers);
         var service = new BookingService(adapter);
         var sessionContext = new SessionContext();
-        var plugin = new BookingPlugin(service, sessionContext);
+        var tenantContext = new TenantContext();
+        var plugin = new BookingPlugin(service, sessionContext, tenantContext);
 
         var tomorrow = DateTime.Today.AddDays(1);
         // Asegurar que el día es laboral
@@ -195,7 +196,8 @@ public class SessionContextTests
 
         // Usar un SessionContext NUEVO (sin validación previa)
         var sessionContext = new SessionContext();
-        var plugin = new BookingPlugin(service, sessionContext);
+        var tenantContext = new TenantContext();
+        var plugin = new BookingPlugin(service, sessionContext, tenantContext);
 
         var result = await plugin.CancelAppointment(booking.ConfirmationCode);
 

@@ -47,7 +47,7 @@ public class InMemoryClientAdapterTests
             ClientName = "Juan Pérez",
             ProviderId = "PRV001",
             ProviderName = "Dr. Carlos Ramírez",
-            ScheduledDate = DateTime.Now.Date,
+            ScheduledDate = DateTime.UtcNow.Date,
             ScheduledTime = new TimeSpan(10, 0, 0),
             Status = BookingStatus.Confirmed
         };
@@ -71,7 +71,7 @@ public class InMemoryClientAdapterTests
         {
             ClientName = "Juan Pérez",
             ProviderId = "PRV001",
-            ScheduledDate = DateTime.Now.Date,
+            ScheduledDate = DateTime.UtcNow.Date,
             ScheduledTime = new TimeSpan(10, 0, 0)
         };
         var created = await _adapter.CreateBookingAsync(booking);
@@ -101,7 +101,7 @@ public class InMemoryClientAdapterTests
     public async Task ExistsAsync_ShouldReturnTrue_WhenBookingExists()
     {
         // Arrange
-        var date = DateTime.Now.Date;
+        var date = DateTime.UtcNow.Date;
         var time = new TimeSpan(10, 0, 0);
         var providerId = "PRV001";
 
@@ -125,7 +125,7 @@ public class InMemoryClientAdapterTests
     public async Task ExistsAsync_ShouldIgnoreCancelledBookings()
     {
         // Arrange
-        var date = DateTime.Now.Date;
+        var date = DateTime.UtcNow.Date;
         var time = new TimeSpan(10, 0, 0);
         var providerId = "PRV001";
 

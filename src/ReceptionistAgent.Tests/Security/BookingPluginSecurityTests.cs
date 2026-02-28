@@ -40,7 +40,8 @@ public class BookingPluginSecurityTests
             .ReturnsAsync(bookings);
 
         var sessionContext = new SessionContext();
-        var plugin = new BookingPlugin(_mockService.Object, sessionContext);
+        var tenantContext = new TenantContext();
+        var plugin = new BookingPlugin(_mockService.Object, sessionContext, tenantContext);
 
         var result = await plugin.GetAllAppointmentsByDate();
 
@@ -72,7 +73,8 @@ public class BookingPluginSecurityTests
 
         // SessionContext sin validar → debería denegar acceso
         var sessionContext = new SessionContext();
-        var plugin = new BookingPlugin(_mockService.Object, sessionContext);
+        var tenantContext = new TenantContext();
+        var plugin = new BookingPlugin(_mockService.Object, sessionContext, tenantContext);
 
         var result = await plugin.GetAppointmentInfo(confirmationCode: "ABC123");
 
@@ -99,7 +101,8 @@ public class BookingPluginSecurityTests
 
         // Pre-validar por código + clientId
         var sessionContext = new SessionContext();
-        var plugin = new BookingPlugin(_mockService.Object, sessionContext);
+        var tenantContext = new TenantContext();
+        var plugin = new BookingPlugin(_mockService.Object, sessionContext, tenantContext);
 
         var result = await plugin.GetAppointmentInfo(confirmationCode: "ABC123", clientId: "CC-123456");
 

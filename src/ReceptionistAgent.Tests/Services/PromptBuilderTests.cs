@@ -73,7 +73,7 @@ public class PromptBuilderTests
         var tenant = CreateClinicTenant();
         var prompt = await _builder.BuildSystemPromptAsync(tenant, CreateTestProviders());
 
-        Assert.Contains(DateTime.Now.ToString("yyyy-MM-dd"), prompt);
+        Assert.Contains(DateTime.UtcNow.ToString("yyyy-MM-dd"), prompt);
     }
 
     [Fact]
