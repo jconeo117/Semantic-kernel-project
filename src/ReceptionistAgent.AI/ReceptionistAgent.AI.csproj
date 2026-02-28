@@ -1,7 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\ClinicSimulator.Core\ClinicSimulator.Core.csproj" />
+    <ProjectReference Include="..\ReceptionistAgent.Core\ReceptionistAgent.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

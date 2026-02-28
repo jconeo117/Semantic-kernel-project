@@ -1,9 +1,9 @@
 using System.ComponentModel;
-using ClinicSimulator.Core.Adapters;
-using ClinicSimulator.Core.Models;
+using ReceptionistAgent.Core.Adapters;
+using ReceptionistAgent.Core.Models;
 using Microsoft.SemanticKernel;
 
-namespace ClinicSimulator.AI.Plugins;
+namespace ReceptionistAgent.AI.Plugins;
 
 public class BusinessInfoPlugin
 {
