@@ -1,4 +1,4 @@
-namespace ClinicSimulator.Connectors.Models;
+namespace ReceptionistAgent.Connectors.Models;
 
 /// <summary>
 /// Configuración de conexión para un tenant específico.

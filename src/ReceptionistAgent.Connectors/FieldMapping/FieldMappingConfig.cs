@@ -1,4 +1,4 @@
-namespace ClinicSimulator.Connectors.Models;
+namespace ReceptionistAgent.Connectors.Models;
 
 /// <summary>
 /// Configuración de mapeo de campos entre el modelo de dominio
@@ -68,7 +68,7 @@ public class FieldMappingConfig
 
     /// <summary>
     /// Mapeo de campos personalizados (CustomFields) del tenant.
-    /// Key: nombre lógico del campo (ej: "patientId", "phone", "email")
+    /// Key: nombre lógico del campo (ej: "clientId", "phone", "email")
     /// Value: nombre de la columna SQL (ej: "documento_paciente", "telefono")
     /// 
     /// Estos campos se almacenan en BookingRecord.CustomFields

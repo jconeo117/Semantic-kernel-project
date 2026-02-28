@@ -1,4 +1,4 @@
-namespace ClinicSimulator.Connectors.Models;
+namespace ReceptionistAgent.Connectors.Models;
 
 /// <summary>
 /// Define el tipo de conector/adapter que se utilizará para acceder

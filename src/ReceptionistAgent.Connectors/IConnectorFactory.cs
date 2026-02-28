@@ -1,6 +1,6 @@
-using ClinicSimulator.Core.Adapters;
+using ReceptionistAgent.Core.Adapters;
 
-namespace ClinicSimulator.Connectors;
+namespace ReceptionistAgent.Connectors;
 
 /// <summary>
 /// Factory para crear instancias de IClientDataAdapter conectadas a bases de datos externas.

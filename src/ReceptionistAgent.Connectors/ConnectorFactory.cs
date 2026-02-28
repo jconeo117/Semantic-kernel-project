@@ -1,6 +1,6 @@
-using ClinicSimulator.Core.Adapters;
+using ReceptionistAgent.Core.Adapters;
 
-namespace ClinicSimulator.Connectors;
+namespace ReceptionistAgent.Connectors;
 
 /// <summary>
 /// Implementación de IConnectorFactory que crea adapters SQL Server

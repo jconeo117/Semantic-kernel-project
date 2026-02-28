@@ -47,7 +47,7 @@
             "IsAvailable": "activo"
           },
           "CustomFieldMappings": {
-            "patientId": "documento_paciente",
+            "clientId": "documento_cliente",
             "phone": "telefono",
             "email": "correo_electronico",
             "reason": "motivo_consulta",
@@ -89,7 +89,7 @@
             "IsAvailable": "is_active"
           },
           "CustomFieldMappings": {
-            "patientId": "customer_doc",
+            "clientId": "customer_doc",
             "phone": "phone_number",
             "email": "email",
             "reason": "service_notes"
