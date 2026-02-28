@@ -10,11 +10,27 @@ public class BookingPlugin
 {
     private readonly IBookingService _bookingService;
     private readonly ISessionContext _sessionContext;
+    private readonly TenantContext _tenantContext;
 
-    public BookingPlugin(IBookingService bookingService, ISessionContext sessionContext)
+    public BookingPlugin(IBookingService bookingService, ISessionContext sessionContext, TenantContext tenantContext)
     {
         _bookingService = bookingService;
         _sessionContext = sessionContext;
+        _tenantContext = tenantContext;
+    }
+
+    private DateTime GetTenantCurrentDate()
+    {
+        var tzId = _tenantContext.CurrentTenant?.TimeZoneId ?? "UTC";
+        try
+        {
+            var tzInfo = TimeZoneInfo.FindSystemTimeZoneById(tzId);
+            return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tzInfo).Date;
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return DateTime.UtcNow.Date; // Fallback to UTC if timezone is invalid
+        }
     }
 
     [KernelFunction]
@@ -68,7 +84,7 @@ public class BookingPlugin
     public async Task<string> GetFirstAvailableAppointment(
         [Description("Número de días hacia adelante a buscar (default: 30)")] int daysToSearch = 30)
     {
-        var today = DateTime.Now.Date;
+        var today = GetTenantCurrentDate();
         var allProviders = await _bookingService.GetAllProvidersAsync();
 
         for (int i = 0; i < daysToSearch; i++)
@@ -270,7 +286,7 @@ public class BookingPlugin
     [Description("Lista la ocupación de citas para hoy (sin datos de clientes por privacidad).")]
     public async Task<string> GetAllAppointmentsByDate()
     {
-        var bookings = await _bookingService.GetBookingsByDateAsync(DateTime.Now.Date);
+        var bookings = await _bookingService.GetBookingsByDateAsync(GetTenantCurrentDate());
         if (!bookings.Any())
             return "No hay citas agendadas para hoy";
 

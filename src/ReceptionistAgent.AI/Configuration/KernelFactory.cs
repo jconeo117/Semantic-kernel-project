@@ -27,10 +27,10 @@ public class KernelFactory
     /// </summary>
     /// <param name="configuration">Configuración de la aplicación.</param>
     /// <param name="provider">Nombre del proveedor (debe coincidir con un IAIProviderConfigurator registrado).</param>
-    /// <param name="loggerFactory">Logger factory del host para inyectar en el kernel.</param>
+    /// <param name="serviceProvider">Dependency injection service provider.</param>
     /// <returns>Kernel configurado listo para usar.</returns>
     /// <exception cref="ArgumentException">Si el proveedor no está registrado.</exception>
-    public Kernel CreateKernel(IConfiguration configuration, string provider, ILoggerFactory loggerFactory)
+    public Kernel CreateKernel(IConfiguration configuration, string provider, IServiceProvider serviceProvider)
     {
         if (!_configurators.TryGetValue(provider, out var configurator))
         {
@@ -42,8 +42,11 @@ public class KernelFactory
 
         var builder = Kernel.CreateBuilder();
 
+        var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
+
         // Inyectar logging del host en el kernel
         builder.Services.AddSingleton(loggerFactory);
+
         builder.Services.AddSingleton<IFunctionInvocationFilter, FunctionInvocationFilter>();
 
         // Delegar configuración al strategy del proveedor
