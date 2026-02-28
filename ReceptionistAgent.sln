@@ -1,19 +1,19 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClinicSimulator.Core", "src\ClinicSimulator.Core\ClinicSimulator.Core.csproj", "{05393480-1619-42F4-874E-DB0E7E6E9155}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReceptionistAgent.Core", "src\ReceptionistAgent.Core\ReceptionistAgent.Core.csproj", "{05393480-1619-42F4-874E-DB0E7E6E9155}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClinicSimulator.AI", "src\ClinicSimulator.AI\ClinicSimulator.AI.csproj", "{502664AE-C1C2-466C-8EE1-64504109C33F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReceptionistAgent.AI", "src\ReceptionistAgent.AI\ReceptionistAgent.AI.csproj", "{502664AE-C1C2-466C-8EE1-64504109C33F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClinicSimulator.Tests", "src\ClinicSimulator.Tests\ClinicSimulator.Tests.csproj", "{F7AEB99E-2CBF-4F88-A669-7E022A153A81}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReceptionistAgent.Tests", "src\ReceptionistAgent.Tests\ReceptionistAgent.Tests.csproj", "{F7AEB99E-2CBF-4F88-A669-7E022A153A81}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClinicSimulator.Api", "src\ClinicSimulator.Api\ClinicSimulator.Api.csproj", "{15940CEB-EE29-460A-821A-32FCC726D580}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReceptionistAgent.Api", "src\ReceptionistAgent.Api\ReceptionistAgent.Api.csproj", "{15940CEB-EE29-460A-821A-32FCC726D580}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClinicSimulator.Connectors", "src\ClinicSimulator.Connectors\ClinicSimulator.Connectors.csproj", "{09946807-58F2-4294-BC54-2DC2F3A68F4C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ReceptionistAgent.Connectors", "src\ReceptionistAgent.Connectors\ReceptionistAgent.Connectors.csproj", "{09946807-58F2-4294-BC54-2DC2F3A68F4C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
