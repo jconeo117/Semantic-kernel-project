@@ -1,7 +1,7 @@
 using Microsoft.OpenApi;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
-namespace ClinicSimulator.Api.Swagger;
+namespace ReceptionistAgent.Api.Swagger;
 
 /// <summary>
 /// Agrega el header X-Tenant-Id como parámetro requerido

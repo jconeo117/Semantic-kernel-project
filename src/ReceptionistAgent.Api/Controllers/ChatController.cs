@@ -1,18 +1,18 @@
-using ClinicSimulator.AI.Agents;
-using ClinicSimulator.Core.Adapters;
-using ClinicSimulator.Core.Models;
-using ClinicSimulator.Core.Repositories;
-using ClinicSimulator.Core.Security;
-using ClinicSimulator.Core.Services;
+using ReceptionistAgent.AI.Agents;
+using ReceptionistAgent.Core.Adapters;
+using ReceptionistAgent.Core.Models;
+using ReceptionistAgent.Core.Repositories;
+using ReceptionistAgent.Core.Security;
+using ReceptionistAgent.Core.Services;
 using Microsoft.AspNetCore.Mvc;
 
-namespace ClinicSimulator.Api.Controllers;
+namespace ReceptionistAgent.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
 public class ChatController : ControllerBase
 {
-    private readonly RecepcionistAgent _agent;
+    private readonly IRecepcionistAgent _agent;
     private readonly IChatSessionRepository _sessionRepository;
     private readonly TenantContext _tenantContext;
     private readonly IPromptBuilder _promptBuilder;
@@ -22,7 +22,7 @@ public class ChatController : ControllerBase
     private readonly IAuditLogger _auditLogger;
 
     public ChatController(
-        RecepcionistAgent agent,
+        IRecepcionistAgent agent,
         IChatSessionRepository sessionRepository,
         TenantContext tenantContext,
         IPromptBuilder promptBuilder,

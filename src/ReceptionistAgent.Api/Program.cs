@@ -1,14 +1,14 @@
-using ClinicSimulator.AI.Agents;
-using ClinicSimulator.AI.Configuration;
-using ClinicSimulator.AI.Plugins;
-using ClinicSimulator.Api.Middleware;
-using ClinicSimulator.Core.Adapters;
-using ClinicSimulator.Core.Models;
-using ClinicSimulator.Core.Repositories;
-using ClinicSimulator.Core.Security;
-using ClinicSimulator.Core.Services;
-using ClinicSimulator.Core.Session;
-using ClinicSimulator.Core.Tenant;
+using ReceptionistAgent.AI.Agents;
+using ReceptionistAgent.AI.Configuration;
+using ReceptionistAgent.AI.Plugins;
+using ReceptionistAgent.Api.Middleware;
+using ReceptionistAgent.Core.Adapters;
+using ReceptionistAgent.Core.Models;
+using ReceptionistAgent.Core.Repositories;
+using ReceptionistAgent.Core.Security;
+using ReceptionistAgent.Core.Services;
+using ReceptionistAgent.Core.Session;
+using ReceptionistAgent.Core.Tenant;
 using Microsoft.SemanticKernel;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,7 +18,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.OperationFilter<ClinicSimulator.Api.Swagger.TenantHeaderOperationFilter>();
+    c.OperationFilter<ReceptionistAgent.Api.Swagger.TenantHeaderOperationFilter>();
 });
 
 // --- Tenant Configuration ---
@@ -88,20 +88,29 @@ builder.Services.AddScoped<IClientDataAdapter>(sp =>
 
 builder.Services.AddScoped<IBookingService, BookingService>();
 
-// --- Semantic Kernel & AI ---
-builder.Services.AddScoped<RecepcionistAgent>(sp =>
+// --- Semantic Kernel & AI (Strategy Pattern) ---
+builder.Services.AddSingleton<IAIProviderConfigurator, GoogleAIConfigurator>();
+builder.Services.AddSingleton<IAIProviderConfigurator, GroqAIConfigurator>();
+builder.Services.AddSingleton<KernelFactory>();
+
+builder.Services.AddScoped<IRecepcionistAgent>(sp =>
 {
     var kernel = sp.GetRequiredService<Kernel>();
+    var kernelFactory = sp.GetRequiredService<KernelFactory>();
     var config = sp.GetRequiredService<IConfiguration>();
     var provider = config["AI:Provider"] ?? "Google";
-    return new RecepcionistAgent(kernel, provider);
+    var settings = kernelFactory.GetExecutionSettings(provider);
+    return new RecepcionistAgent(kernel, settings);
 });
 
 builder.Services.AddScoped<Kernel>(sp =>
 {
     var configuration = sp.GetRequiredService<IConfiguration>();
+    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+    var kernelFactory = sp.GetRequiredService<KernelFactory>();
     var provider = configuration["AI:Provider"] ?? "Google";
-    var kernel = KernelFactory.CreateKernel(configuration, provider);
+
+    var kernel = kernelFactory.CreateKernel(configuration, provider, loggerFactory);
 
     // Register Plugins (scoped: usan el adapter del tenant actual)
     var bookingService = sp.GetRequiredService<IBookingService>();

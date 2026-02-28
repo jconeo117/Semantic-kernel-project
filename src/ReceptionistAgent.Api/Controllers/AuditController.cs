@@ -1,7 +1,7 @@
-using ClinicSimulator.Core.Security;
+using ReceptionistAgent.Core.Security;
 using Microsoft.AspNetCore.Mvc;
 
-namespace ClinicSimulator.Api.Controllers;
+namespace ReceptionistAgent.Api.Controllers;
 
 /// <summary>
 /// Endpoints de auditoría para consultar registro de interacciones y eventos de seguridad.

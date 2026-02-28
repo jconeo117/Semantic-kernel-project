@@ -1,8 +1,8 @@
-using ClinicSimulator.Core.Models;
-using ClinicSimulator.Core.Tenant;
+using ReceptionistAgent.Core.Models;
+using ReceptionistAgent.Core.Tenant;
 using Microsoft.AspNetCore.Http;
 
-namespace ClinicSimulator.Api.Middleware;
+namespace ReceptionistAgent.Api.Middleware;
 
 /// <summary>
 /// Middleware que resuelve el tenant a partir del header X-Tenant-Id.

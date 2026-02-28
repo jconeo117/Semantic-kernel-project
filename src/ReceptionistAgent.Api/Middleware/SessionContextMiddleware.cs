@@ -1,16 +1,16 @@
-using ClinicSimulator.Core.Session;
+using ReceptionistAgent.Core.Session;
 using Microsoft.AspNetCore.Http;
 
-namespace ClinicSimulator.Api.Middleware;
+namespace ReceptionistAgent.Api.Middleware;
 
 /// <summary>
 /// Middleware que inicializa el SessionContext por request.
-/// Si el header X-Patient-Id está presente, pre-valida el paciente en la sesión.
+/// Si el header X-Client-Id está presente, pre-valida el paciente en la sesión.
 /// </summary>
 public class SessionContextMiddleware
 {
     private readonly RequestDelegate _next;
-    private const string PatientIdHeaderName = "X-Patient-Id";
+    private const string ClientIdHeaderName = "X-Client-Id";
 
     public SessionContextMiddleware(RequestDelegate next)
     {
@@ -27,11 +27,11 @@ public class SessionContextMiddleware
             return;
         }
 
-        // Si el header X-Patient-Id está presente, pre-validar el paciente
-        if (context.Request.Headers.TryGetValue(PatientIdHeaderName, out var patientId) &&
-            !string.IsNullOrWhiteSpace(patientId))
+        // Si el header X-Client-Id está presente, pre-validar el paciente
+        if (context.Request.Headers.TryGetValue(ClientIdHeaderName, out var clientId) &&
+            !string.IsNullOrWhiteSpace(clientId))
         {
-            sessionContext.ValidatePatientId(patientId!);
+            sessionContext.ValidateClientId(clientId!);
         }
 
         await _next(context);
