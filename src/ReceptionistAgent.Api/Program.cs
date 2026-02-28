@@ -10,6 +10,9 @@ using ReceptionistAgent.Core.Services;
 using ReceptionistAgent.Core.Session;
 using ReceptionistAgent.Core.Tenant;
 using Microsoft.SemanticKernel;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
+using ReceptionistAgent.Api.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +23,22 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.OperationFilter<ReceptionistAgent.Api.Swagger.TenantHeaderOperationFilter>();
 });
+builder.Services.AddHealthChecks();
+
+// --- Rate Limiting Config ---
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("Global", opt =>
+    {
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.PermitLimit = 60; // Max 60 requests per minute globally for API protectection
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit = 10;
+    });
+
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+
 
 // --- Tenant Configuration ---
 var tenantsConfig = new Dictionary<string, TenantConfiguration>();
@@ -69,6 +88,7 @@ builder.Services.AddSingleton<IChatSessionRepository, InMemoryChatSessionReposit
 builder.Services.AddSingleton<IInputGuard, PromptInjectionGuard>();
 builder.Services.AddSingleton<IOutputFilter, SensitiveDataFilter>();
 builder.Services.AddSingleton<IAuditLogger, InMemoryAuditLogger>();
+builder.Services.AddTransient<ApiKeyAuthFilter>();
 
 // Scoped: resuelto por request via middleware
 builder.Services.AddScoped<TenantContext>();
@@ -110,14 +130,14 @@ builder.Services.AddScoped<Kernel>(sp =>
     var kernelFactory = sp.GetRequiredService<KernelFactory>();
     var provider = configuration["AI:Provider"] ?? "Google";
 
-    var kernel = kernelFactory.CreateKernel(configuration, provider, loggerFactory);
+    var kernel = kernelFactory.CreateKernel(configuration, provider, sp);
 
     // Register Plugins (scoped: usan el adapter del tenant actual)
     var bookingService = sp.GetRequiredService<IBookingService>();
     var adapter = sp.GetRequiredService<IClientDataAdapter>();
     var tenantContext = sp.GetRequiredService<TenantContext>();
     var sessionContext = sp.GetRequiredService<ISessionContext>();
-    kernel.Plugins.AddFromObject(new BookingPlugin(bookingService, sessionContext), "BookingPlugin");
+    kernel.Plugins.AddFromObject(new BookingPlugin(bookingService, sessionContext, tenantContext), "BookingPlugin");
     kernel.Plugins.AddFromObject(new BusinessInfoPlugin(adapter, tenantContext), "BusinessInfoPlugin");
 
     return kernel;
@@ -141,8 +161,10 @@ app.UseMiddleware<TenantMiddleware>();
 app.UseMiddleware<SessionContextMiddleware>();
 
 app.UseAuthorization();
+app.UseRateLimiter(); // Apply rate limiting BEFORE controllers
 
 app.MapControllers();
+app.MapHealthChecks("/health");
 
 app.Run();
 

@@ -1,18 +1,23 @@
+using Microsoft.AspNetCore.Mvc;
 using ReceptionistAgent.AI.Agents;
 using ReceptionistAgent.Core.Adapters;
 using ReceptionistAgent.Core.Models;
 using ReceptionistAgent.Core.Repositories;
 using ReceptionistAgent.Core.Security;
 using ReceptionistAgent.Core.Services;
-using Microsoft.AspNetCore.Mvc;
+using System.Security.Cryptography;
+using System.Text;
+using Twilio.AspNet.Common;
+using Twilio.AspNet.Core;
+using Twilio.TwiML;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace ReceptionistAgent.Api.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/twilio/{tenantId}")]
 [EnableRateLimiting("Global")]
-public class ChatController : ControllerBase
+public class TwilioWebhookController : TwilioController
 {
     private readonly IRecepcionistAgent _agent;
     private readonly IChatSessionRepository _sessionRepository;
@@ -23,7 +28,7 @@ public class ChatController : ControllerBase
     private readonly IOutputFilter _outputFilter;
     private readonly IAuditLogger _auditLogger;
 
-    public ChatController(
+    public TwilioWebhookController(
         IRecepcionistAgent agent,
         IChatSessionRepository sessionRepository,
         TenantContext tenantContext,
@@ -44,37 +49,41 @@ public class ChatController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Chat([FromBody] ChatRequest request)
+    [Consumes("application/x-www-form-urlencoded")]
+    [ValidateRequest] // Filtro de seguridad de Twilio que lee Request.Headers["X-Twilio-Signature"]
+    public async Task<TwiMLResult> Webhook([FromRoute] string tenantId, [FromForm] SmsRequest request)
     {
-        if (request == null || string.IsNullOrWhiteSpace(request.Message))
-        {
-            return BadRequest("Message is required.");
-        }
-
         if (!_tenantContext.IsResolved)
         {
-            return BadRequest("Tenant no resuelto.");
+            return TwiMLMessage("Lo siento, no puedo procesar la solicitud en este momento (Tenant no encontrado).");
         }
 
-        var tenantId = _tenantContext.CurrentTenant!.TenantId;
-        var sessionId = request.SessionId == Guid.Empty ? Guid.NewGuid() : request.SessionId;
+        var message = request.Body?.Trim() ?? string.Empty;
+        var phone = request.From?.Trim() ?? string.Empty; // Twilio "From" (ej: whatsapp:+123456789)
 
-        // ═══ PASO 1: Input Guard - Detectar prompt injection ═══
-        var guardResult = await _inputGuard.AnalyzeAsync(request.Message);
+        if (string.IsNullOrWhiteSpace(message) || string.IsNullOrWhiteSpace(phone))
+        {
+            return TwiMLMessage("Mensaje inválido.");
+        }
 
-        // Log del mensaje del usuario (siempre)
+        // Mapeo determinístico: Teléfono -> Guid de SessionId
+        var sessionId = GenerateSessionIdFromPhone(phone);
+
+        // ═══ PASO 1: Input Guard ═══
+        var guardResult = await _inputGuard.AnalyzeAsync(message);
+
         await _auditLogger.LogAsync(new AuditEntry
         {
             TenantId = tenantId,
             SessionId = sessionId,
-            EventType = "UserMessage",
-            Content = request.Message,
-            ThreatLevel = guardResult.Level
+            EventType = "WhatsAppUserMessage",
+            Content = message,
+            ThreatLevel = guardResult.Level,
+            Metadata = new() { ["phone"] = phone }
         });
 
         if (!guardResult.IsAllowed)
         {
-            // Log del bloqueo de seguridad
             await _auditLogger.LogAsync(new AuditEntry
             {
                 TenantId = tenantId,
@@ -82,28 +91,22 @@ public class ChatController : ControllerBase
                 EventType = "SecurityBlock",
                 Content = guardResult.RejectionReason ?? "Mensaje bloqueado",
                 ThreatLevel = guardResult.Level,
-                Metadata = new() { ["originalMessage"] = request.Message }
+                Metadata = new() { ["phone"] = phone, ["originalMessage"] = message }
             });
 
-            // Retornar respuesta genérica (mantener el rol, NO error HTTP)
-            return Ok(new ChatResponse
-            {
-                SessionId = sessionId,
-                Response = guardResult.RejectionReason
-                    ?? "Solo puedo ayudarle con la gestión de citas. ¿Desea agendar una cita?"
-            });
+            return TwiMLMessage(guardResult.RejectionReason ?? "Solo puedo ayudarle con la gestión de citas. ¿Desea agendar una cita?");
         }
 
-        // ═══ PASO 2: Procesar mensaje con el agente ═══
+        // ═══ PASO 2: Procesar con el Agente ═══
         var providers = await _adapter.GetAllProvidersAsync();
         var systemPrompt = await _promptBuilder.BuildSystemPromptAsync(_tenantContext.CurrentTenant!, providers);
         var history = await _sessionRepository.GetChatHistoryAsync(sessionId, systemPrompt);
 
-        var response = await _agent.RespondAsync(request.Message, history);
+        var response = await _agent.RespondAsync(message, history);
 
         await _sessionRepository.UpdateChatHistoryAsync(sessionId, history);
 
-        // ═══ PASO 3: Output Filter - Filtrar PII y prompt leaks ═══
+        // ═══ PASO 3: Output Filter ═══
         var filterResult = await _outputFilter.FilterAsync(response, tenantId);
 
         if (filterResult.WasModified)
@@ -122,19 +125,34 @@ public class ChatController : ControllerBase
             });
         }
 
-        // Log de la respuesta del agente
         await _auditLogger.LogAsync(new AuditEntry
         {
             TenantId = tenantId,
             SessionId = sessionId,
-            EventType = "AgentResponse",
-            Content = filterResult.FilteredContent
+            EventType = "WhatsAppAgentResponse",
+            Content = filterResult.FilteredContent,
+            Metadata = new() { ["phone"] = phone }
         });
 
-        return Ok(new ChatResponse
-        {
-            SessionId = sessionId,
-            Response = filterResult.FilteredContent
-        });
+        return TwiMLMessage(filterResult.FilteredContent);
+    }
+
+    private TwiMLResult TwiMLMessage(string message)
+    {
+        var response = new MessagingResponse();
+        response.Message(message);
+        return TwiML(response);
+    }
+
+    /// <summary>
+    /// Convierte un número de teléfono de forma determinística en un Guid.
+    /// Así el mismo número de teléfono siempre genera el mismo SessionId
+    /// para mantener el historial de chat con el usuario.
+    /// </summary>
+    private static Guid GenerateSessionIdFromPhone(string phone)
+    {
+        using var md5 = MD5.Create();
+        var hash = md5.ComputeHash(Encoding.UTF8.GetBytes("WhatsAppSessionSalt_" + phone));
+        return new Guid(hash);
     }
 }

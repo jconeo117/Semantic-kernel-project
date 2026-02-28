@@ -28,8 +28,20 @@ public class TenantMiddleware
             return;
         }
 
-        if (!context.Request.Headers.TryGetValue(TenantHeaderName, out var tenantId) ||
-            string.IsNullOrWhiteSpace(tenantId))
+        // Extraer de Header primero
+        string? tenantId = context.Request.Headers[TenantHeaderName];
+
+        // Fallback para webhooks de Twilio (vienen en la URL: /api/twilio/{tenantId})
+        if (string.IsNullOrWhiteSpace(tenantId) && path.StartsWith("/api/twilio/"))
+        {
+            var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 3 && parts[1] == "twilio")
+            {
+                tenantId = parts[2];
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(tenantId))
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             context.Response.ContentType = "application/json";

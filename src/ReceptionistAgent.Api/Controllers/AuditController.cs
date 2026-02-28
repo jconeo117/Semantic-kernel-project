@@ -1,4 +1,7 @@
+using ReceptionistAgent.Core.Models;
 using ReceptionistAgent.Core.Security;
+using ReceptionistAgent.Api.Security;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ReceptionistAgent.Api.Controllers;
@@ -9,6 +12,8 @@ namespace ReceptionistAgent.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
+[EnableRateLimiting("Global")]
+[ServiceFilter(typeof(ApiKeyAuthFilter))]
 public class AuditController : ControllerBase
 {
     private readonly IAuditLogger _auditLogger;
