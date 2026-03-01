@@ -2,9 +2,12 @@ using ReceptionistAgent.AI.Agents;
 using ReceptionistAgent.AI.Configuration;
 using ReceptionistAgent.AI.Plugins;
 using ReceptionistAgent.Api.Middleware;
+using ReceptionistAgent.Connectors.Adapters;
 using ReceptionistAgent.Core.Adapters;
 using ReceptionistAgent.Core.Models;
-using ReceptionistAgent.Core.Repositories;
+using ReceptionistAgent.Connectors.Repositories;
+using ReceptionistAgent.Connectors.Security;
+using ReceptionistAgent.Api.Security;
 using ReceptionistAgent.Core.Security;
 using ReceptionistAgent.Core.Services;
 using ReceptionistAgent.Core.Session;
@@ -12,7 +15,6 @@ using ReceptionistAgent.Core.Tenant;
 using Microsoft.SemanticKernel;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
-using ReceptionistAgent.Api.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 

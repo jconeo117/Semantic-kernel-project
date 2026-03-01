@@ -1,7 +1,9 @@
 using ReceptionistAgent.AI.Agents;
 using ReceptionistAgent.Core.Adapters;
 using ReceptionistAgent.Core.Models;
-using ReceptionistAgent.Core.Repositories;
+using ReceptionistAgent.Connectors.Repositories;
+using ReceptionistAgent.Connectors.Security;
+using ReceptionistAgent.Api.Security;
 using ReceptionistAgent.Core.Security;
 using ReceptionistAgent.Core.Services;
 using Microsoft.AspNetCore.Mvc;
