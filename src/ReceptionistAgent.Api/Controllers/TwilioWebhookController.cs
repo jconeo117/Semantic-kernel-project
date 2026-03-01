@@ -6,6 +6,7 @@ using ReceptionistAgent.Connectors.Repositories;
 using ReceptionistAgent.Connectors.Security;
 using ReceptionistAgent.Api.Security;
 using ReceptionistAgent.Core.Security;
+using ReceptionistAgent.Api.Services;
 using ReceptionistAgent.Core.Services;
 using System.Security.Cryptography;
 using System.Text;
@@ -21,33 +22,15 @@ namespace ReceptionistAgent.Api.Controllers;
 [EnableRateLimiting("Global")]
 public class TwilioWebhookController : TwilioController
 {
-    private readonly IRecepcionistAgent _agent;
-    private readonly IChatSessionRepository _sessionRepository;
+    private readonly IChatOrchestrator _orchestrator;
     private readonly TenantContext _tenantContext;
-    private readonly IPromptBuilder _promptBuilder;
-    private readonly IClientDataAdapter _adapter;
-    private readonly IInputGuard _inputGuard;
-    private readonly IOutputFilter _outputFilter;
-    private readonly IAuditLogger _auditLogger;
 
     public TwilioWebhookController(
-        IRecepcionistAgent agent,
-        IChatSessionRepository sessionRepository,
-        TenantContext tenantContext,
-        IPromptBuilder promptBuilder,
-        IClientDataAdapter adapter,
-        IInputGuard inputGuard,
-        IOutputFilter outputFilter,
-        IAuditLogger auditLogger)
+        IChatOrchestrator orchestrator,
+        TenantContext tenantContext)
     {
-        _agent = agent;
-        _sessionRepository = sessionRepository;
+        _orchestrator = orchestrator;
         _tenantContext = tenantContext;
-        _promptBuilder = promptBuilder;
-        _adapter = adapter;
-        _inputGuard = inputGuard;
-        _outputFilter = outputFilter;
-        _auditLogger = auditLogger;
     }
 
     [HttpPost]
@@ -71,72 +54,16 @@ public class TwilioWebhookController : TwilioController
         // Mapeo determinístico: Teléfono -> Guid de SessionId
         var sessionId = GenerateSessionIdFromPhone(phone);
 
-        // ═══ PASO 1: Input Guard ═══
-        var guardResult = await _inputGuard.AnalyzeAsync(message);
+        // ═══ Ejecutar pipeline mediante el orquestador ═══
+        var result = await _orchestrator.ProcessMessageAsync(
+            message: message,
+            sessionId: sessionId,
+            tenantId: tenantId,
+            eventTypePrefix: "WhatsApp",
+            additionalMetadata: new Dictionary<string, string> { ["phone"] = phone }
+        );
 
-        await _auditLogger.LogAsync(new AuditEntry
-        {
-            TenantId = tenantId,
-            SessionId = sessionId,
-            EventType = "WhatsAppUserMessage",
-            Content = message,
-            ThreatLevel = guardResult.Level,
-            Metadata = new() { ["phone"] = phone }
-        });
-
-        if (!guardResult.IsAllowed)
-        {
-            await _auditLogger.LogAsync(new AuditEntry
-            {
-                TenantId = tenantId,
-                SessionId = sessionId,
-                EventType = "SecurityBlock",
-                Content = guardResult.RejectionReason ?? "Mensaje bloqueado",
-                ThreatLevel = guardResult.Level,
-                Metadata = new() { ["phone"] = phone, ["originalMessage"] = message }
-            });
-
-            return TwiMLMessage(guardResult.RejectionReason ?? "Solo puedo ayudarle con la gestión de citas. ¿Desea agendar una cita?");
-        }
-
-        // ═══ PASO 2: Procesar con el Agente ═══
-        var providers = await _adapter.GetAllProvidersAsync();
-        var systemPrompt = await _promptBuilder.BuildSystemPromptAsync(_tenantContext.CurrentTenant!, providers);
-        var history = await _sessionRepository.GetChatHistoryAsync(sessionId, systemPrompt);
-
-        var response = await _agent.RespondAsync(message, history);
-
-        await _sessionRepository.UpdateChatHistoryAsync(sessionId, history);
-
-        // ═══ PASO 3: Output Filter ═══
-        var filterResult = await _outputFilter.FilterAsync(response, tenantId);
-
-        if (filterResult.WasModified)
-        {
-            await _auditLogger.LogAsync(new AuditEntry
-            {
-                TenantId = tenantId,
-                SessionId = sessionId,
-                EventType = "OutputFiltered",
-                Content = "Respuesta filtrada por seguridad",
-                Metadata = new()
-                {
-                    ["redactedItems"] = string.Join(", ", filterResult.RedactedItems),
-                    ["originalLength"] = response.Length.ToString()
-                }
-            });
-        }
-
-        await _auditLogger.LogAsync(new AuditEntry
-        {
-            TenantId = tenantId,
-            SessionId = sessionId,
-            EventType = "WhatsAppAgentResponse",
-            Content = filterResult.FilteredContent,
-            Metadata = new() { ["phone"] = phone }
-        });
-
-        return TwiMLMessage(filterResult.FilteredContent);
+        return TwiMLMessage(result.Response);
     }
 
     private TwiMLResult TwiMLMessage(string message)

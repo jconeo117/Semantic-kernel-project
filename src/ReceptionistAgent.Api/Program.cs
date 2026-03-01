@@ -10,6 +10,7 @@ using ReceptionistAgent.Connectors.Security;
 using ReceptionistAgent.Api.Security;
 using ReceptionistAgent.Core.Security;
 using ReceptionistAgent.Core.Services;
+using ReceptionistAgent.Api.Services;
 using ReceptionistAgent.Core.Session;
 using ReceptionistAgent.Core.Tenant;
 using Microsoft.SemanticKernel;
@@ -115,6 +116,8 @@ builder.Services.AddSingleton<IAIProviderConfigurator, GoogleAIConfigurator>();
 builder.Services.AddSingleton<IAIProviderConfigurator, GroqAIConfigurator>();
 builder.Services.AddSingleton<KernelFactory>();
 
+builder.Services.AddScoped<IChatOrchestrator, ChatOrchestrator>();
+
 builder.Services.AddScoped<IRecepcionistAgent>(sp =>
 {
     var kernel = sp.GetRequiredService<Kernel>();
@@ -139,7 +142,8 @@ builder.Services.AddScoped<Kernel>(sp =>
     var adapter = sp.GetRequiredService<IClientDataAdapter>();
     var tenantContext = sp.GetRequiredService<TenantContext>();
     var sessionContext = sp.GetRequiredService<ISessionContext>();
-    kernel.Plugins.AddFromObject(new BookingPlugin(bookingService, sessionContext, tenantContext), "BookingPlugin");
+    var logger = sp.GetRequiredService<ILogger<BookingPlugin>>();
+    kernel.Plugins.AddFromObject(new BookingPlugin(bookingService, sessionContext, tenantContext, logger), "BookingPlugin");
     kernel.Plugins.AddFromObject(new BusinessInfoPlugin(adapter, tenantContext), "BusinessInfoPlugin");
 
     return kernel;
