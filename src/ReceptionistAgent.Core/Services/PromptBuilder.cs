@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using ReceptionistAgent.Core.Models;
 
 namespace ReceptionistAgent.Core.Services;
@@ -8,6 +9,13 @@ namespace ReceptionistAgent.Core.Services;
 /// </summary>
 public class PromptBuilder : IPromptBuilder
 {
+    private readonly ILogger<PromptBuilder> _logger;
+
+    public PromptBuilder(ILogger<PromptBuilder> logger)
+    {
+        _logger = logger;
+    }
+
     public Task<string> BuildSystemPromptAsync(TenantConfiguration tenant, List<ServiceProvider> providers)
     {
         var tzId = tenant.TimeZoneId ?? "UTC";
@@ -17,8 +25,9 @@ public class PromptBuilder : IPromptBuilder
             var tzInfo = TimeZoneInfo.FindSystemTimeZoneById(tzId);
             today = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tzInfo);
         }
-        catch (TimeZoneNotFoundException)
+        catch (TimeZoneNotFoundException ex)
         {
+            _logger.LogWarning(ex, "Zona horaria '{TimeZoneId}' no encontrada para el tenant '{TenantId}'. Usando UTC como respaldo.", tzId, tenant.TenantId);
             today = DateTime.UtcNow;
         }
         var providerList = string.Join("\n", providers.Select(p => $"- {p.Name} ({p.Role})"));
