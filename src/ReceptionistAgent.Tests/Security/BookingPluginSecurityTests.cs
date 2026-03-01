@@ -2,6 +2,7 @@ using ReceptionistAgent.AI.Plugins;
 using ReceptionistAgent.Core.Models;
 using ReceptionistAgent.Core.Services;
 using ReceptionistAgent.Core.Session;
+using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
 
@@ -41,7 +42,8 @@ public class BookingPluginSecurityTests
 
         var sessionContext = new SessionContext();
         var tenantContext = new TenantContext();
-        var plugin = new BookingPlugin(_mockService.Object, sessionContext, tenantContext);
+        var mockLogger = new Mock<ILogger<BookingPlugin>>();
+        var plugin = new BookingPlugin(_mockService.Object, sessionContext, tenantContext, mockLogger.Object);
 
         var result = await plugin.GetAllAppointmentsByDate();
 
@@ -74,7 +76,8 @@ public class BookingPluginSecurityTests
         // SessionContext sin validar → debería denegar acceso
         var sessionContext = new SessionContext();
         var tenantContext = new TenantContext();
-        var plugin = new BookingPlugin(_mockService.Object, sessionContext, tenantContext);
+        var mockLogger = new Mock<ILogger<BookingPlugin>>();
+        var plugin = new BookingPlugin(_mockService.Object, sessionContext, tenantContext, mockLogger.Object);
 
         var result = await plugin.GetAppointmentInfo(confirmationCode: "ABC123");
 
@@ -102,7 +105,8 @@ public class BookingPluginSecurityTests
         // Pre-validar por código + clientId
         var sessionContext = new SessionContext();
         var tenantContext = new TenantContext();
-        var plugin = new BookingPlugin(_mockService.Object, sessionContext, tenantContext);
+        var mockLogger = new Mock<ILogger<BookingPlugin>>();
+        var plugin = new BookingPlugin(_mockService.Object, sessionContext, tenantContext, mockLogger.Object);
 
         var result = await plugin.GetAppointmentInfo(confirmationCode: "ABC123", clientId: "CC-123456");
 

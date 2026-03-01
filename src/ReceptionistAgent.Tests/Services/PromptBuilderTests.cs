@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using Moq;
 using ReceptionistAgent.Core.Models;
 using ReceptionistAgent.Core.Services;
 using Xunit;
@@ -8,9 +10,12 @@ public class PromptBuilderTests
 {
     private readonly PromptBuilder _builder;
 
+    private readonly Mock<ILogger<PromptBuilder>> _mockLogger;
+
     public PromptBuilderTests()
     {
-        _builder = new PromptBuilder();
+        _mockLogger = new Mock<ILogger<PromptBuilder>>();
+        _builder = new PromptBuilder(_mockLogger.Object);
     }
 
     private static TenantConfiguration CreateClinicTenant() => new()

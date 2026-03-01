@@ -3,6 +3,8 @@ using ReceptionistAgent.Core.Adapters;
 using ReceptionistAgent.Core.Models;
 using ReceptionistAgent.Core.Services;
 using ReceptionistAgent.Core.Session;
+using Microsoft.Extensions.Logging;
+using Moq;
 using Xunit;
 
 namespace ReceptionistAgent.Tests.Session;
@@ -146,7 +148,8 @@ public class SessionContextTests
         var service = new BookingService(adapter);
         var sessionContext = new SessionContext();
         var tenantContext = new TenantContext();
-        var plugin = new BookingPlugin(service, sessionContext, tenantContext);
+        var mockLogger = new Mock<ILogger<BookingPlugin>>();
+        var plugin = new BookingPlugin(service, sessionContext, tenantContext, mockLogger.Object);
 
         var tomorrow = DateTime.Today.AddDays(1);
         // Asegurar que el día es laboral
@@ -197,7 +200,8 @@ public class SessionContextTests
         // Usar un SessionContext NUEVO (sin validación previa)
         var sessionContext = new SessionContext();
         var tenantContext = new TenantContext();
-        var plugin = new BookingPlugin(service, sessionContext, tenantContext);
+        var mockLogger = new Mock<ILogger<BookingPlugin>>();
+        var plugin = new BookingPlugin(service, sessionContext, tenantContext, mockLogger.Object);
 
         var result = await plugin.CancelAppointment(booking.ConfirmationCode);
 
