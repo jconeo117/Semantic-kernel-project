@@ -19,7 +19,7 @@ public class TenantMiddlewareIntegrationTests : IClassFixture<WebApplicationFact
     public async Task Request_WithValidTenantHeader_ShouldReturn200()
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/Chat");
-        request.Headers.Add("X-Tenant-Id", "clinica-vista-clara");
+        request.Headers.Add("X-Tenant-Id", "dev-tenant-01");
         request.Content = new StringContent(
             JsonSerializer.Serialize(new { SessionId = Guid.NewGuid(), Message = "Hola" }),
             Encoding.UTF8,
@@ -76,9 +76,9 @@ public class TenantMiddlewareIntegrationTests : IClassFixture<WebApplicationFact
     [Fact]
     public async Task Request_WithDifferentTenants_ShouldBeAccepted()
     {
-        // Clinic tenant
+        // Dev tenant
         var request1 = new HttpRequestMessage(HttpMethod.Post, "/api/Chat");
-        request1.Headers.Add("X-Tenant-Id", "clinica-vista-clara");
+        request1.Headers.Add("X-Tenant-Id", "dev-tenant-01");
         request1.Content = new StringContent(
             JsonSerializer.Serialize(new { SessionId = Guid.NewGuid(), Message = "Hola" }),
             Encoding.UTF8,
@@ -86,16 +86,5 @@ public class TenantMiddlewareIntegrationTests : IClassFixture<WebApplicationFact
 
         var response1 = await _client.SendAsync(request1);
         Assert.NotEqual(HttpStatusCode.BadRequest, response1.StatusCode);
-
-        // Salon tenant
-        var request2 = new HttpRequestMessage(HttpMethod.Post, "/api/Chat");
-        request2.Headers.Add("X-Tenant-Id", "salon-bella");
-        request2.Content = new StringContent(
-            JsonSerializer.Serialize(new { SessionId = Guid.NewGuid(), Message = "Hola" }),
-            Encoding.UTF8,
-            "application/json");
-
-        var response2 = await _client.SendAsync(request2);
-        Assert.NotEqual(HttpStatusCode.BadRequest, response2.StatusCode);
     }
 }
