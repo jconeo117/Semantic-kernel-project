@@ -12,18 +12,21 @@ public class BookingPlugin
     private readonly IBookingService _bookingService;
     private readonly ISessionContext _sessionContext;
     private readonly TenantContext _tenantContext;
+    private readonly IReminderService? _reminderService;
     private readonly ILogger<BookingPlugin> _logger;
 
     public BookingPlugin(
         IBookingService bookingService,
         ISessionContext sessionContext,
         TenantContext tenantContext,
-        ILogger<BookingPlugin> logger)
+        ILogger<BookingPlugin> logger,
+        IReminderService? reminderService = null)
     {
         _bookingService = bookingService;
         _sessionContext = sessionContext;
         _tenantContext = tenantContext;
         _logger = logger;
+        _reminderService = reminderService;
     }
 
     private DateTime GetTenantCurrentDate()
@@ -186,6 +189,20 @@ public class BookingPlugin
                 _sessionContext.ValidateClientId(clientId);
                 _sessionContext.ValidateConfirmationCode(booking.ConfirmationCode);
 
+                // Agendar recordatorios automáticos (24h y 1h antes)
+                if (_reminderService != null && !string.IsNullOrWhiteSpace(clientPhone))
+                {
+                    try
+                    {
+                        await _reminderService.ScheduleRemindersForBookingAsync(booking, clientPhone);
+                        _logger.LogInformation("Reminders scheduled for booking {Code}", booking.ConfirmationCode);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to schedule reminders for booking {Code}", booking.ConfirmationCode);
+                    }
+                }
+
                 return $"ÉXITO: Cita confirmada exitosamente. \n" +
                        $"Código de Confirmación: {booking.ConfirmationCode} \n" +
                        $"Cliente: {clientName} \n" +
@@ -204,22 +221,27 @@ public class BookingPlugin
     }
 
     [KernelFunction]
-    [Description("Cancelar una cita. Requiere verificación de identidad: el cliente debe haber sido validado previamente en esta sesión.")]
+    [Description("Cancelar una cita. Requiere el código de confirmación Y el documento de identidad del cliente para verificar ownership.")]
     public async Task<string> CancelAppointment(
-        [Description("Codigo de confirmacion de la cita")] string confirmationCode)
+        [Description("Codigo de confirmacion de la cita")] string confirmationCode,
+        [Description("Documento de identidad del cliente para verificar ownership")] string clientId)
     {
         var booking = await _bookingService.GetBookingAsync(confirmationCode);
         if (booking == null)
             return $"La cita con el código {confirmationCode} no fue encontrada, pruebe nuevamente.";
 
-        // Verificar ownership: debe tener el código validado o el clientId validado
-        var clientId = booking.CustomFields.TryGetValue("clientId", out var pid) ? pid?.ToString() : null;
-        if (!_sessionContext.IsCodeValidated(confirmationCode) &&
-            (clientId == null || !_sessionContext.IsClientValidated(clientId)))
+        // Verificar ownership: comparar documento proporcionado con el de la reserva
+        var bookingClientId = booking.CustomFields.TryGetValue("clientId", out var pid) ? pid?.ToString() : null;
+        if (string.IsNullOrWhiteSpace(clientId) ||
+            bookingClientId == null ||
+            !clientId.Equals(bookingClientId, StringComparison.OrdinalIgnoreCase))
         {
-            return "ACCESO DENEGADO: No se puede cancelar esta cita. " +
-                   "Primero debe verificar su identidad proporcionando su documento de identidad o código de confirmación.";
+            return "ACCESO DENEGADO: El documento de identidad no coincide con la cita. Verifique los datos e intente de nuevo.";
         }
+
+        // Auto-validar en sesión para operaciones posteriores
+        _sessionContext.ValidateClientId(clientId);
+        _sessionContext.ValidateConfirmationCode(confirmationCode);
 
         var success = await _bookingService.CancelBookingAsync(confirmationCode);
 
