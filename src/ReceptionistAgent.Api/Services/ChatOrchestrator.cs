@@ -87,15 +87,45 @@ public class ChatOrchestrator : IChatOrchestrator
 
         // ═══ PASO 2: Procesar con el Agente ═══
         var providers = await _adapter.GetAllProvidersAsync();
-        var systemPrompt = await _promptBuilder.BuildSystemPromptAsync(_tenantContext.CurrentTenant!, providers);
-        var history = await _sessionRepository.GetChatHistoryAsync(sessionId, systemPrompt);
 
-        var response = await _agent.RespondAsync(message, history);
+        if (_tenantContext.CurrentTenant == null)
+        {
+            return new OrchestrationResult
+            {
+                Response = "Error interno: no se pudo resolver el tenant para esta solicitud.",
+                WasFiltered = true
+            };
+        }
 
-        await _sessionRepository.UpdateChatHistoryAsync(sessionId, history);
+        var systemPrompt = await _promptBuilder.BuildSystemPromptAsync(_tenantContext.CurrentTenant, providers);
+        var history = await _sessionRepository.GetChatHistoryAsync(sessionId, tenantId, systemPrompt);
+
+        string response;
+        try
+        {
+            response = await _agent.RespondAsync(message, history);
+        }
+        catch (Exception ex) when (ex.Message.Contains("tool_use_failed"))
+        {
+            var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+            var historyJson = System.Text.Json.JsonSerializer.Serialize(history, options);
+            Console.WriteLine($"\n[GROQ TOOL_USE_FAILED DEBUG] --- ChatHistory sent to Groq:\n{historyJson}\n------------------\n");
+
+            // Retornar mensaje amigable en lugar de crash con 500
+            return new OrchestrationResult
+            {
+                Response = "Disculpe, tuve un problema procesando su solicitud. ¿Podría reformular su mensaje o intentar de nuevo?",
+                WasFiltered = false
+            };
+        }
+
+        await _sessionRepository.UpdateChatHistoryAsync(sessionId, tenantId, history);
 
         // ═══ PASO 3: Output Filter ═══
-        var filterResult = await _outputFilter.FilterAsync(response, tenantId);
+        var allowedPhones = _tenantContext.CurrentTenant?.Phone != null
+            ? new[] { _tenantContext.CurrentTenant.Phone }
+            : null;
+        var filterResult = await _outputFilter.FilterAsync(response, tenantId, allowedPhones);
 
         if (filterResult.WasModified)
         {

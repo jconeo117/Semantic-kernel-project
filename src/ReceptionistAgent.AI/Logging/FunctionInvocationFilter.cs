@@ -11,7 +11,6 @@ namespace ReceptionistAgent.AI.Logging;
 public class FunctionInvocationFilter : IFunctionInvocationFilter
 {
     private readonly ILogger _logger;
-    private static int _callCount = 0;
 
     public FunctionInvocationFilter(ILoggerFactory loggerFactory)
     {
@@ -22,11 +21,11 @@ public class FunctionInvocationFilter : IFunctionInvocationFilter
         FunctionInvocationContext context,
         Func<FunctionInvocationContext, Task> next)
     {
-        var callId = Interlocked.Increment(ref _callCount);
+        var callId = Guid.NewGuid().ToString()[..8]; // Short unique ID per invocation
         var stopwatch = Stopwatch.StartNew();
 
         _logger.LogInformation(
-            "🔧 Function call #{CallId}: {FunctionName}",
+            "🔧 Function call [{CallId}]: {FunctionName}",
             callId, context.Function.Name);
 
         if (context.Arguments.Count > 0)
@@ -51,7 +50,7 @@ public class FunctionInvocationFilter : IFunctionInvocationFilter
                 : resultStr;
 
             _logger.LogInformation(
-                "✅ Function #{CallId} [{FunctionName}] completed in {ElapsedMs}ms | Result: {ResultPreview}",
+                "✅ Function [{CallId}] [{FunctionName}] completed in {ElapsedMs}ms | Result: {ResultPreview}",
                 callId, context.Function.Name, stopwatch.ElapsedMilliseconds, preview);
         }
         catch (Exception ex)
@@ -59,7 +58,7 @@ public class FunctionInvocationFilter : IFunctionInvocationFilter
             stopwatch.Stop();
 
             _logger.LogError(ex,
-                "❌ Function #{CallId} [{FunctionName}] failed after {ElapsedMs}ms",
+                "❌ Function [{CallId}] [{FunctionName}] failed after {ElapsedMs}ms",
                 callId, context.Function.Name, stopwatch.ElapsedMilliseconds);
 
             throw;

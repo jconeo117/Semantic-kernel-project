@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
@@ -28,10 +30,15 @@ public class GroqAIConfigurator : IAIProviderConfigurator
             _maxTokens = tokens;
         }
 
+        var loggerFactory = builder.Services.BuildServiceProvider().GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>();
+        var handler = new ReceptionistAgent.AI.Logging.HttpLoggingHandler(loggerFactory.CreateLogger<ReceptionistAgent.AI.Logging.HttpLoggingHandler>(), new System.Net.Http.HttpClientHandler());
+        var httpClient = new System.Net.Http.HttpClient(handler);
+
         builder.AddOpenAIChatCompletion(
             modelId: modelId,
             apiKey: apiKey,
-            endpoint: new Uri(endpoint)
+            endpoint: new Uri(endpoint),
+            httpClient: httpClient
         );
     }
 
@@ -39,7 +46,7 @@ public class GroqAIConfigurator : IAIProviderConfigurator
     {
         return new OpenAIPromptExecutionSettings
         {
-            ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions,
+            FunctionChoiceBehavior = FunctionChoiceBehavior.Auto(),
             Temperature = 0.7,
             MaxTokens = _maxTokens
         };

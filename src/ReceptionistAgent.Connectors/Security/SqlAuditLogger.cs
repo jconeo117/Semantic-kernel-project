@@ -45,9 +45,9 @@ public class SqlAuditLogger : IAuditLogger
         const string sql = "SELECT * FROM Audits WHERE SessionId = @SessionId ORDER BY Timestamp ASC";
 
         using var connection = new SqlConnection(_connectionString);
-        var entries = await connection.QueryAsync<AuditEntry>(sql, new { SessionId = sessionId });
+        var entities = await connection.QueryAsync<AuditEntity>(sql, new { SessionId = sessionId });
 
-        return entries.ToList();
+        return entities.Select(MapToEntry).ToList();
     }
 
     public async Task<List<AuditEntry>> GetSecurityEventsAsync(string? tenantId, DateTime from, DateTime to)
@@ -65,14 +65,14 @@ public class SqlAuditLogger : IAuditLogger
         sql += " ORDER BY Timestamp DESC";
 
         using var connection = new SqlConnection(_connectionString);
-        var entries = await connection.QueryAsync<AuditEntry>(sql, new
+        var entities = await connection.QueryAsync<AuditEntity>(sql, new
         {
             From = from,
             To = to,
             TenantId = tenantId
         });
 
-        return entries.ToList();
+        return entities.Select(MapToEntry).ToList();
     }
 
     public async Task<List<AuditEntry>> GetAllEventsAsync(string? tenantId, int limit = 100)
@@ -88,8 +88,41 @@ public class SqlAuditLogger : IAuditLogger
         sql += " ORDER BY Timestamp DESC";
 
         using var connection = new SqlConnection(_connectionString);
-        var entries = await connection.QueryAsync<AuditEntry>(sql, new { TenantId = tenantId });
+        var entities = await connection.QueryAsync<AuditEntity>(sql, new { TenantId = tenantId });
 
-        return entries.ToList();
+        return entities.Select(MapToEntry).ToList();
     }
+
+    private static AuditEntry MapToEntry(AuditEntity entity)
+    {
+        return new AuditEntry
+        {
+            Id = entity.Id,
+            TenantId = entity.TenantId,
+            SessionId = entity.SessionId,
+            Timestamp = entity.Timestamp,
+            EventType = entity.EventType,
+            Content = entity.Content,
+            ThreatLevel = Enum.TryParse<Core.Security.ThreatLevel>(entity.ThreatLevel, true, out var level) ? level : null,
+            Metadata = string.IsNullOrWhiteSpace(entity.Metadata)
+                ? new Dictionary<string, string>()
+                : JsonSerializer.Deserialize<Dictionary<string, string>>(entity.Metadata) ?? new Dictionary<string, string>()
+        };
+    }
+}
+
+/// <summary>
+/// Entity para mapeo directo con Dapper desde la tabla Audits.
+/// Permite deserializar correctamente el campo Metadata (JSON string → Dictionary).
+/// </summary>
+public class AuditEntity
+{
+    public Guid Id { get; set; }
+    public string TenantId { get; set; } = string.Empty;
+    public Guid SessionId { get; set; }
+    public DateTime Timestamp { get; set; }
+    public string EventType { get; set; } = string.Empty;
+    public string Content { get; set; } = string.Empty;
+    public string? ThreatLevel { get; set; }
+    public string Metadata { get; set; } = string.Empty;
 }

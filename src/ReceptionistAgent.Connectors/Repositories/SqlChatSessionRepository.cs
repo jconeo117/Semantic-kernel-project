@@ -16,18 +16,18 @@ public class SqlChatSessionRepository : IChatSessionRepository
         _connectionString = connectionString;
     }
 
-    public async Task<ChatHistory> GetChatHistoryAsync(Guid sessionId, string systemPrompt)
+    public async Task<ChatHistory> GetChatHistoryAsync(Guid sessionId, string tenantId, string systemPrompt)
     {
-        const string sql = "SELECT HistoryJson FROM ChatSessions WHERE Id = @Id";
+        const string sql = "SELECT HistoryJson FROM ChatSessions WHERE Id = @Id AND TenantId = @TenantId";
 
         using var connection = new SqlConnection(_connectionString);
-        var json = await connection.QuerySingleOrDefaultAsync<string>(sql, new { Id = sessionId });
+        var json = await connection.QuerySingleOrDefaultAsync<string>(sql, new { Id = sessionId, TenantId = tenantId });
 
         if (string.IsNullOrWhiteSpace(json))
         {
             // If doesn't exist, start a new history with the system prompt
             var newHistory = new ChatHistory(systemPrompt);
-            await InsertChatHistoryAsync(sessionId, newHistory);
+            await InsertChatHistoryAsync(sessionId, tenantId, newHistory);
             return newHistory;
         }
 
@@ -46,6 +46,13 @@ public class SqlChatSessionRepository : IChatSessionRepository
                 }
             }
 
+            // Ensure system prompt is present in restored history.
+            // Serialization may lose it, and without it the LLM forgets its role.
+            if (!history.Any(m => m.Role == AuthorRole.System))
+            {
+                history.Insert(0, new ChatMessageContent(AuthorRole.System, systemPrompt));
+            }
+
             return history;
         }
         catch
@@ -55,42 +62,55 @@ public class SqlChatSessionRepository : IChatSessionRepository
         }
     }
 
-    public async Task UpdateChatHistoryAsync(Guid sessionId, ChatHistory history)
+    public async Task UpdateChatHistoryAsync(Guid sessionId, string tenantId, ChatHistory history)
     {
-        var messages = history.ToList(); // Convert to serializable List<ChatMessageContent>
-        var json = JsonSerializer.Serialize(messages);
+        // Filter out tool-related messages before persisting.
+        // Groq's strict validation rejects deserialized FunctionCall/FunctionResult
+        // messages because the tool call format gets corrupted during JSON round-tripping.
+        // We only persist system, user, and assistant (text-only) messages.
+        var persistableMessages = history
+            .Where(m => m.Role == AuthorRole.System
+                     || m.Role == AuthorRole.User
+                     || (m.Role == AuthorRole.Assistant && !string.IsNullOrEmpty(m.Content)))
+            .Where(m => m.Items == null || !m.Items.Any(i =>
+                i is Microsoft.SemanticKernel.FunctionCallContent
+                || i is Microsoft.SemanticKernel.FunctionResultContent))
+            .ToList();
+        var json = JsonSerializer.Serialize(persistableMessages);
 
         const string sql = @"
             UPDATE ChatSessions 
             SET HistoryJson = @HistoryJson, UpdatedAt = @UpdatedAt 
-            WHERE Id = @Id";
+            WHERE Id = @Id AND TenantId = @TenantId";
 
         using var connection = new SqlConnection(_connectionString);
         var rows = await connection.ExecuteAsync(sql, new
         {
             HistoryJson = json,
             UpdatedAt = DateTime.UtcNow,
-            Id = sessionId
+            Id = sessionId,
+            TenantId = tenantId
         });
 
         // If it didn't update anything, it means it doesn't exist anymore, let's insert it
         if (rows == 0)
         {
-            await InsertChatHistoryAsync(sessionId, history);
+            await InsertChatHistoryAsync(sessionId, tenantId, history);
         }
     }
 
-    private async Task InsertChatHistoryAsync(Guid sessionId, ChatHistory history)
+    private async Task InsertChatHistoryAsync(Guid sessionId, string tenantId, ChatHistory history)
     {
         var json = JsonSerializer.Serialize(history.ToList());
         const string sql = @"
-            INSERT INTO ChatSessions (Id, HistoryJson, CreatedAt, UpdatedAt)
-            VALUES (@Id, @HistoryJson, @CreatedAt, @UpdatedAt)";
+            INSERT INTO ChatSessions (Id, TenantId, HistoryJson, CreatedAt, UpdatedAt)
+            VALUES (@Id, @TenantId, @HistoryJson, @CreatedAt, @UpdatedAt)";
 
         using var connection = new SqlConnection(_connectionString);
         await connection.ExecuteAsync(sql, new
         {
             Id = sessionId,
+            TenantId = tenantId,
             HistoryJson = json,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow

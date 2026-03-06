@@ -91,4 +91,32 @@ public class SensitiveDataFilterTests
         Assert.False(result.WasModified);
         Assert.Equal("", result.FilteredContent);
     }
+
+    // --- Teléfono del negocio (allowedPhones) NO debe redactarse ---
+
+    [Fact]
+    public async Task FilterAsync_WithAllowedPhone_ShouldNotMask()
+    {
+        var response = "Puede comunicarse con nosotros al 604-123-4567 para más información.";
+        var allowedPhones = new[] { "604-123-4567" };
+
+        var result = await _filter.FilterAsync(response, "test-tenant", allowedPhones);
+
+        Assert.Contains("604-123-4567", result.FilteredContent);
+    }
+
+    // --- Teléfonos de clientes SÍ deben redactarse incluso con allowedPhones ---
+
+    [Fact]
+    public async Task FilterAsync_WithAllowedPhone_ShouldStillMaskOtherPhones()
+    {
+        var response = "Nuestro número es 604-123-4567. Su número registrado es 312-999-8888.";
+        var allowedPhones = new[] { "604-123-4567" };
+
+        var result = await _filter.FilterAsync(response, "test-tenant", allowedPhones);
+
+        Assert.Contains("604-123-4567", result.FilteredContent);
+        Assert.Contains("[TELÉFONO PROTEGIDO]", result.FilteredContent);
+        Assert.DoesNotContain("312-999-8888", result.FilteredContent);
+    }
 }

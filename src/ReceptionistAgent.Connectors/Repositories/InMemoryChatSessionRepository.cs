@@ -7,7 +7,7 @@ public class InMemoryChatSessionRepository : IChatSessionRepository
 {
     private readonly ConcurrentDictionary<Guid, ChatHistory> _sessions = new();
 
-    public Task<ChatHistory> GetChatHistoryAsync(Guid sessionId, string systemPrompt)
+    public Task<ChatHistory> GetChatHistoryAsync(Guid sessionId, string tenantId, string systemPrompt)
     {
         if (_sessions.TryGetValue(sessionId, out var history))
         {
@@ -19,7 +19,7 @@ public class InMemoryChatSessionRepository : IChatSessionRepository
         return Task.FromResult(newHistory);
     }
 
-    public Task UpdateChatHistoryAsync(Guid sessionId, ChatHistory history)
+    public Task UpdateChatHistoryAsync(Guid sessionId, string tenantId, ChatHistory history)
     {
         _sessions.AddOrUpdate(sessionId, history, (key, oldValue) => history);
         return Task.CompletedTask;

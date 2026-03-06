@@ -76,7 +76,7 @@ public class SessionContextTests
                      EndTime = TimeSpan.FromHours(17), SlotDurationMinutes = 30 }
         };
         var adapter = new InMemoryClientAdapter(providers);
-        var service = new BookingService(adapter);
+        var service = new BookingService(adapter, new TenantContext());
 
         var tomorrow = DateTime.Today.AddDays(1);
         while (!providers[0].WorkingDays.Contains(tomorrow.DayOfWeek))
@@ -106,7 +106,7 @@ public class SessionContextTests
                      EndTime = TimeSpan.FromHours(17), SlotDurationMinutes = 30 }
         };
         var adapter = new InMemoryClientAdapter(providers);
-        var service = new BookingService(adapter);
+        var service = new BookingService(adapter, new TenantContext());
 
         var day1 = DateTime.Today.AddDays(1);
         while (!providers[0].WorkingDays.Contains(day1.DayOfWeek))
@@ -145,7 +145,7 @@ public class SessionContextTests
                      EndTime = TimeSpan.FromHours(17), SlotDurationMinutes = 30 }
         };
         var adapter = new InMemoryClientAdapter(providers);
-        var service = new BookingService(adapter);
+        var service = new BookingService(adapter, new TenantContext());
         var sessionContext = new SessionContext();
         var tenantContext = new TenantContext();
         var mockLogger = new Mock<ILogger<BookingPlugin>>();
@@ -187,7 +187,7 @@ public class SessionContextTests
                      EndTime = TimeSpan.FromHours(17), SlotDurationMinutes = 30 }
         };
         var adapter = new InMemoryClientAdapter(providers);
-        var service = new BookingService(adapter);
+        var service = new BookingService(adapter, new TenantContext());
 
         var tomorrow = DateTime.Today.AddDays(1);
         while (!providers[0].WorkingDays.Contains(tomorrow.DayOfWeek))
@@ -203,7 +203,8 @@ public class SessionContextTests
         var mockLogger = new Mock<ILogger<BookingPlugin>>();
         var plugin = new BookingPlugin(service, sessionContext, tenantContext, mockLogger.Object);
 
-        var result = await plugin.CancelAppointment(booking.ConfirmationCode);
+        // Intentar cancelar con un documento INCORRECTO
+        var result = await plugin.CancelAppointment(booking.ConfirmationCode, "CC-WRONG-ID");
 
         Assert.Contains("ACCESO DENEGADO", result);
     }

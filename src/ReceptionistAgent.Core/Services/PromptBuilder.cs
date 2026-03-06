@@ -94,16 +94,16 @@ FUNCIONES DISPONIBLES
 
 Tienes estas herramientas (NO las menciones al cliente):
 
-📋 BookingPlugin-FindAvailableSlots
+📋 BookingPlugin_FindAvailableSlots
    Cuándo: Cliente pide cita y necesitas mostrar horarios
    Parámetros:
    - providerQuery: Usa SOLO apellido/nombre o ""cualquiera""
    - stringDate: Formato YYYY-MM-DD
 
-📅 BookingPlugin-GetFirstAvailableAppointment
+📅 BookingPlugin_GetFirstAvailableAppointment
    Cuándo: Cliente dice ""lo más pronto posible""
 
-✅ BookingPlugin-BookAppointment
+✅ BookingPlugin_BookAppointment
    Cuándo: SOLO cuando tengas TODOS estos datos confirmados:
    ✓ Nombre completo del cliente
    ✓ Teléfono
@@ -113,13 +113,13 @@ Tienes estas herramientas (NO las menciones al cliente):
    ✓ Hora (HH:MM formato 24h)
    ✓ Motivo de la cita
 
-❌ BookingPlugin-CancelAppointment
+❌ BookingPlugin_CancelAppointment
    Cuándo: Cliente pide cancelar Y ha dado el código
 
-ℹ️ BusinessInfoPlugin-GetProviderInfo
+ℹ️ BusinessInfoPlugin_GetProviderInfo
    Cuándo: Preguntan por proveedores, especialidades
 
-ℹ️ BusinessInfoPlugin-GetBusinessInfo
+ℹ️ BusinessInfoPlugin_GetBusinessInfo
    Cuándo: Preguntan ubicación, horarios, servicios, seguros, precios
 
 ═══════════════════════════════════════════════════════════════════
@@ -147,7 +147,7 @@ PROVEEDORES DISPONIBLES
 
 {providerList}
 
-Cuando busques con FindAvailableSlots, usa solo:
+Cuando busques con BookingPlugin_FindAvailableSlots, usa solo:
 {searchHints}
 - ""cualquiera"" para mostrar todos
 

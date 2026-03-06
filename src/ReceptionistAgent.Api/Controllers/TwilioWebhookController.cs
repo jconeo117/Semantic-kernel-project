@@ -35,7 +35,7 @@ public class TwilioWebhookController : TwilioController
 
     [HttpPost]
     [Consumes("application/x-www-form-urlencoded")]
-    [ValidateRequest] // Filtro de seguridad de Twilio que lee Request.Headers["X-Twilio-Signature"]
+    // [ValidateRequest] // Filtro de seguridad de Twilio. COMENTADO PARA PRUEBAS LOCALES.
     public async Task<TwiMLResult> Webhook([FromRoute] string tenantId, [FromForm] SmsRequest request)
     {
         if (!_tenantContext.IsResolved)

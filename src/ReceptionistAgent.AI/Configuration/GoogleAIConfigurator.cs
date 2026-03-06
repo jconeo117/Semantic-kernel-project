@@ -36,7 +36,7 @@ public class GoogleAIConfigurator : IAIProviderConfigurator
     {
         return new GeminiPromptExecutionSettings
         {
-            ToolCallBehavior = GeminiToolCallBehavior.AutoInvokeKernelFunctions,
+            FunctionChoiceBehavior = FunctionChoiceBehavior.Auto(),
             Temperature = 0.7,
             MaxTokens = _maxTokens
         };

@@ -6,10 +6,12 @@ namespace ReceptionistAgent.Core.Services;
 public class BookingService : IBookingService
 {
     private readonly IClientDataAdapter _adapter;
+    private readonly TenantContext _tenantContext;
 
-    public BookingService(IClientDataAdapter adapter)
+    public BookingService(IClientDataAdapter adapter, TenantContext tenantContext)
     {
         _adapter = adapter;
+        _tenantContext = tenantContext;
     }
 
     public async Task<List<TimeSlot>> GetAvailableSlotsAsync(string providerId, DateTime date)
@@ -69,6 +71,7 @@ public class BookingService : IBookingService
 
         var booking = new BookingRecord
         {
+            TenantId = _tenantContext.CurrentTenant?.TenantId ?? string.Empty,
             ClientName = clientName,
             ProviderId = providerId,
             ProviderName = provider.Name,

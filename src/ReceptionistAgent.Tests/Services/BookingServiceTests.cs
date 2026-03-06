@@ -43,7 +43,7 @@ public class BookingServiceTests
         _mockAdapter.Setup(a => a.GetAllProvidersAsync())
             .ReturnsAsync(_testProviders);
 
-        _service = new BookingService(_mockAdapter.Object);
+        _service = new BookingService(_mockAdapter.Object, new TenantContext());
     }
 
     // === GetAvailableSlotsAsync ===

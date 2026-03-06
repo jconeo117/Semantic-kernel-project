@@ -33,7 +33,7 @@ public class SensitiveDataFilter : IOutputFilter
         new(@"RESTRICCI[OÓ]N PROFESIONAL ABSOLUTA", RegexOptions.IgnoreCase | RegexOptions.Compiled),
         new(@"PROTOCOLO DE SEGURIDAD", RegexOptions.IgnoreCase | RegexOptions.Compiled),
         new(@"INSTRUCCIONES DE SEGURIDAD INMUTABLES", RegexOptions.IgnoreCase | RegexOptions.Compiled),
-        new(@"BookingPlugin-\w+|BusinessInfoPlugin-\w+", RegexOptions.IgnoreCase | RegexOptions.Compiled),
+        new(@"BookingPlugin[-_]\w+|BusinessInfoPlugin[-_]\w+", RegexOptions.IgnoreCase | RegexOptions.Compiled),
         new(@"KernelFunction|ToolCallBehavior|AutoInvokeKernel", RegexOptions.IgnoreCase | RegexOptions.Compiled),
     ];
 
@@ -48,7 +48,7 @@ public class SensitiveDataFilter : IOutputFilter
     private const string SafeRoleResponse =
         "Disculpe, ¿puedo ayudarle con alguna consulta sobre nuestros servicios o desea agendar una cita?";
 
-    public Task<FilterResult> FilterAsync(string agentResponse, string tenantId)
+    public Task<FilterResult> FilterAsync(string agentResponse, string tenantId, IEnumerable<string>? allowedPhones = null)
     {
         if (string.IsNullOrWhiteSpace(agentResponse))
             return Task.FromResult(new FilterResult(agentResponse, false, []));
@@ -77,7 +77,23 @@ public class SensitiveDataFilter : IOutputFilter
             }
         }
 
-        // 3. Enmascarar PII
+        // 3. Enmascarar PII — preservar teléfonos permitidos (del negocio)
+        var phoneReplacements = new Dictionary<string, string>();
+        if (allowedPhones != null)
+        {
+            int idx = 0;
+            foreach (var phone in allowedPhones.Where(p => !string.IsNullOrWhiteSpace(p)))
+            {
+                var placeholder = $"__ALLOWED_PHONE_{idx}__";
+                if (filtered.Contains(phone))
+                {
+                    filtered = filtered.Replace(phone, placeholder);
+                    phoneReplacements[placeholder] = phone;
+                    idx++;
+                }
+            }
+        }
+
         foreach (var (pattern, replacement, label) in PiiPatterns)
         {
             if (pattern.IsMatch(filtered))
@@ -86,6 +102,12 @@ public class SensitiveDataFilter : IOutputFilter
                 redactedItems.Add(label);
                 wasModified = true;
             }
+        }
+
+        // Restaurar teléfonos permitidos
+        foreach (var (placeholder, originalPhone) in phoneReplacements)
+        {
+            filtered = filtered.Replace(placeholder, originalPhone);
         }
 
         return Task.FromResult(new FilterResult(filtered, wasModified, redactedItems));
