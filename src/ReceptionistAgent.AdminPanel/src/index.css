@@ -1,0 +1,117 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+
+/* ─── Design Tokens ────────────────────────────────────────────── */
+:root {
+  --bg: #0a0a0a;
+  --surface: #111111;
+  --surface-hover: #161616;
+  --border: #1e1e1e;
+  --border-light: #2a2a2a;
+  --text: #e8e8e8;
+  --text-muted: #666;
+  --text-dim: #444;
+  --accent: #e8ff47;
+  --accent-dim: rgba(232, 255, 71, 0.08);
+  --accent-border: rgba(232, 255, 71, 0.2);
+  --red: #ff4444;
+  --red-dim: rgba(255, 68, 68, 0.08);
+  --green: #44ff88;
+  --green-dim: rgba(68, 255, 136, 0.08);
+  --blue: #4488ff;
+  --blue-dim: rgba(68, 136, 255, 0.08);
+}
+
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  font-family: 'DM Mono', 'Fira Code', monospace;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 2px; }
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+input::placeholder {
+  color: var(--text-dim);
+}
+
+tr:hover td {
+  background: rgba(255, 255, 255, 0.01);
+}
+
+/* ─── Animations ───────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+
+.fade-in {
+  animation: fadeIn 0.25s ease-out;
+}
+
+/* ─── Loading skeleton ─────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-hover) 50%, var(--surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton-block {
+  height: 16px;
+  margin-bottom: 12px;
+  border-radius: 4px;
+}
+
+/* ─── Toast / Error banner ─────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 200;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: fadeIn 0.2s ease-out;
+  max-width: 420px;
+}
+
+.toast--error {
+  background: var(--red-dim);
+  border: 1px solid rgba(255, 68, 68, 0.3);
+  color: var(--red);
+}
+
+.toast--success {
+  background: var(--green-dim);
+  border: 1px solid rgba(68, 255, 136, 0.3);
+  color: var(--green);
+}
