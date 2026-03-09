@@ -29,18 +29,18 @@ public class BookingPlugin
         _reminderService = reminderService;
     }
 
-    private DateTime GetTenantCurrentDate()
+    private DateTime GetTenantCurrentDateTime()
     {
         var tzId = _tenantContext.CurrentTenant?.TimeZoneId ?? "UTC";
         try
         {
             var tzInfo = TimeZoneInfo.FindSystemTimeZoneById(tzId);
-            return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tzInfo).Date;
+            return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tzInfo);
         }
         catch (TimeZoneNotFoundException ex)
         {
             _logger.LogWarning(ex, "Zona horaria '{TimeZoneId}' no encontrada para el tenant actual. Usando fecha UTC como respaldo.", tzId);
-            return DateTime.UtcNow.Date; // Fallback to UTC if timezone is invalid
+            return DateTime.UtcNow; // Fallback to UTC if timezone is invalid
         }
     }
 
@@ -52,6 +52,10 @@ public class BookingPlugin
     {
         if (!DateTime.TryParse(stringDate, out var date))
             return "Por favor, usar el formato YYYY-MM-DD";
+
+        var tenantNow = GetTenantCurrentDateTime();
+        if (date.Date < tenantNow.Date)
+            return $"FALLO: La fecha {date:yyyy-MM-dd} ya ha pasado. Por favor, busca horarios para hoy o en el futuro.";
 
         List<ServiceProvider> matchingProviders;
 
@@ -77,6 +81,11 @@ public class BookingPlugin
             var slots = await _bookingService.GetAvailableSlotsAsync(provider.Id, date);
             var availableSlots = slots.Where(s => s.IsAvailable).ToList();
 
+            if (date.Date == tenantNow.Date)
+            {
+                availableSlots = availableSlots.Where(s => s.Time > tenantNow.TimeOfDay).ToList();
+            }
+
             if (availableSlots.Any())
             {
                 var times = availableSlots.Select(s => s.Time.ToString(@"hh\:mm")).ToList();
@@ -95,7 +104,8 @@ public class BookingPlugin
     public async Task<string> GetFirstAvailableAppointment(
         [Description("Número de días hacia adelante a buscar (default: 30)")] int daysToSearch = 30)
     {
-        var today = GetTenantCurrentDate();
+        var tenantNow = GetTenantCurrentDateTime();
+        var today = tenantNow.Date;
         var allProviders = await _bookingService.GetAllProvidersAsync();
 
         for (int i = 0; i < daysToSearch; i++)
@@ -106,6 +116,11 @@ public class BookingPlugin
             {
                 var slots = await _bookingService.GetAvailableSlotsAsync(provider.Id, date);
                 var availableSlots = slots.Where(s => s.IsAvailable).ToList();
+
+                if (date.Date == tenantNow.Date)
+                {
+                    availableSlots = availableSlots.Where(s => s.Time > tenantNow.TimeOfDay).ToList();
+                }
 
                 if (availableSlots.Any())
                 {
@@ -127,7 +142,7 @@ public class BookingPlugin
         [Description("Nombre completo del cliente")] string clientName,
         [Description("Documento de identidad del cliente (cédula, DNI, etc.) - REQUERIDO")] string clientId,
         [Description("Telefono celular del cliente")] string clientPhone,
-        [Description("Correo electronico del cliente (Opcional, usar 'no-email' si no se tiene)")] string clientEmail,
+        [Description("Correo electronico del cliente (Opcional, usar 'no-email', 'no email' o dejar vacío si el cliente indica que no tiene. NUNCA obligar a proveerlo)")] string clientEmail,
         [Description("Nombre del proveedor (ej: 'Dr. Ramírez') o ID (ej: 'DR001')")] string providerNameOrId,
         [Description("Fecha para agendar la cita. Formato YYYY-MM-DD")] string stringDate,
         [Description("Horario para agendar la cita. Formato 24 horas HH:MM")] string stringTime,
@@ -141,11 +156,17 @@ public class BookingPlugin
         if (string.IsNullOrWhiteSpace(clientId) || invalidTerms.Any(t => clientId.Contains(t, StringComparison.OrdinalIgnoreCase)))
             return "FALLO DE VALIDACIÓN: Falta el DOCUMENTO DE IDENTIDAD del cliente. PREGUNTA al usuario su cédula o documento.";
 
-        if (string.IsNullOrWhiteSpace(clientEmail) || !clientEmail.Contains('@') || invalidTerms.Any(t => clientEmail.Contains(t, StringComparison.OrdinalIgnoreCase)))
-            return "FALLO DE VALIDACIÓN: Falta un EMAIL válido. NO uses 'no-email'. PREGUNTA al usuario su correo.";
-
         if (string.IsNullOrWhiteSpace(clientPhone) || invalidTerms.Any(t => clientPhone.Contains(t, StringComparison.OrdinalIgnoreCase)))
             return "FALLO DE VALIDACIÓN: Falta el TELÉFONO. PREGUNTA al usuario su número.";
+
+        if (!string.IsNullOrWhiteSpace(clientEmail))
+        {
+            var isInvalidTerm = invalidTerms.Any(t => clientEmail.Contains(t, StringComparison.OrdinalIgnoreCase));
+            if (!isInvalidTerm && !clientEmail.Contains('@'))
+            {
+                return "FALLO DE VALIDACIÓN: El formato del correo proporcionado no es válido. Debe contener '@'. Si el cliente no tiene correo, envía 'no-email'.";
+            }
+        }
 
         try
         {
@@ -154,6 +175,14 @@ public class BookingPlugin
 
             if (!TimeSpan.TryParse(stringTime, out var time))
                 return $"FALLO: La hora '{stringTime}' no es válida. Usa formato HH:MM (24h).";
+
+            var tenantNow = GetTenantCurrentDateTime();
+
+            if (date.Date < tenantNow.Date)
+                return $"FALLO: No puedes agendar en el pasado. Hoy es {tenantNow:yyyy-MM-dd}.";
+
+            if (date.Date == tenantNow.Date && time <= tenantNow.TimeOfDay)
+                return $"FALLO: La hora '{stringTime}' ya pasó el día de hoy (hora actual: {tenantNow:HH:mm}). Por favor escoge otro horario.";
 
             var matchingProviders = await _bookingService.SearchProvidersAsync(providerNameOrId);
 
@@ -167,6 +196,14 @@ public class BookingPlugin
                 return $"FALLO: Múltiples proveedores encontrados para '{providerNameOrId}': {string.Join(", ", matchingProviders.Select(p => p.Name))}. Por favor sea más específico.";
 
             var provider = matchingProviders.First();
+
+            var availableSlots = await _bookingService.GetAvailableSlotsAsync(provider.Id, date);
+            var isStillAvailable = availableSlots.Any(s => s.Time == time && s.IsAvailable);
+
+            if (!isStillAvailable)
+            {
+                return $"FALLO DE DISPONIBILIDAD: El horario {time:hh\\:mm} para el día {date:yyyy-MM-dd} ya no se encuentra disponible o no existe. Por favor, OBLIGADO verifica disponibilidad usando FindAvailableSlots y ofrece un nuevo horario real.";
+            }
 
             var customFields = new Dictionary<string, object>
             {
@@ -316,7 +353,7 @@ public class BookingPlugin
     [Description("Lista la ocupación de citas para hoy (sin datos de clientes por privacidad).")]
     public async Task<string> GetAllAppointmentsByDate()
     {
-        var bookings = await _bookingService.GetBookingsByDateAsync(GetTenantCurrentDate());
+        var bookings = await _bookingService.GetBookingsByDateAsync(GetTenantCurrentDateTime().Date);
         if (!bookings.Any())
             return "No hay citas agendadas para hoy";
 

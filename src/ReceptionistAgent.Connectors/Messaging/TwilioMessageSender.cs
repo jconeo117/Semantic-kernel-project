@@ -30,7 +30,7 @@ public class TwilioMessageSender : IMessageSender
             var messageResource = await MessageResource.CreateAsync(
                 body: message,
                 from: new PhoneNumber(_fromNumber),
-                to: new PhoneNumber(to)
+                to: new PhoneNumber($"whatsapp:{to}")
             );
 
             _logger.LogInformation(
