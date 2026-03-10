@@ -5,6 +5,7 @@ using ReceptionistAgent.Connectors.Repositories;
 using ReceptionistAgent.Connectors.Security;
 using ReceptionistAgent.Core.Security;
 using ReceptionistAgent.Core.Services;
+using ReceptionistAgent.Core.Session;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -21,6 +22,7 @@ public class ChatOrchestrator : IChatOrchestrator
     private readonly IOutputFilter _outputFilter;
     private readonly IAuditLogger _auditLogger;
     private readonly TenantContext _tenantContext;
+    private readonly ISessionContext _sessionContext;
 
     public ChatOrchestrator(
         IRecepcionistAgent agent,
@@ -30,7 +32,8 @@ public class ChatOrchestrator : IChatOrchestrator
         IInputGuard inputGuard,
         IOutputFilter outputFilter,
         IAuditLogger auditLogger,
-        TenantContext tenantContext)
+        TenantContext tenantContext,
+        ISessionContext sessionContext)
     {
         _agent = agent;
         _sessionRepository = sessionRepository;
@@ -40,6 +43,7 @@ public class ChatOrchestrator : IChatOrchestrator
         _outputFilter = outputFilter;
         _auditLogger = auditLogger;
         _tenantContext = tenantContext;
+        _sessionContext = sessionContext;
     }
 
     public async Task<OrchestrationResult> ProcessMessageAsync(
@@ -49,6 +53,7 @@ public class ChatOrchestrator : IChatOrchestrator
         string eventTypePrefix,
         Dictionary<string, string>? additionalMetadata = null)
     {
+        _sessionContext.SessionId = sessionId;
         var metadata = additionalMetadata ?? new Dictionary<string, string>();
 
         // ═══ PASO 1: Input Guard ═══
@@ -97,8 +102,9 @@ public class ChatOrchestrator : IChatOrchestrator
             };
         }
 
+        var userPhone = metadata.TryGetValue("phone", out var p) ? p : null;
         var systemPrompt = await _promptBuilder.BuildSystemPromptAsync(_tenantContext.CurrentTenant, providers);
-        var history = await _sessionRepository.GetChatHistoryAsync(sessionId, tenantId, systemPrompt);
+        var history = await _sessionRepository.GetChatHistoryAsync(sessionId, tenantId, systemPrompt, userPhone);
 
         string response;
         try

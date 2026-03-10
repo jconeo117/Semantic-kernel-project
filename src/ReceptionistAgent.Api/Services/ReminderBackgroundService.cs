@@ -46,7 +46,7 @@ public class ReminderBackgroundService : BackgroundService
     {
         using var scope = _serviceProvider.CreateScope();
         var reminderService = scope.ServiceProvider.GetRequiredService<IReminderService>();
-        var messageSender = scope.ServiceProvider.GetRequiredService<IMessageSender>();
+        var senderFactory = scope.ServiceProvider.GetRequiredService<IMessageSenderFactory>();
 
         var pendingReminders = await reminderService.GetPendingRemindersAsync(DateTime.UtcNow);
 
@@ -61,13 +61,14 @@ public class ReminderBackgroundService : BackgroundService
 
             try
             {
+                var messageSender = await senderFactory.CreateSenderAsync(reminder.TenantId);
                 var message = reminder.MessageContent ?? "Recordatorio: Tiene una cita próximamente.";
                 var success = await messageSender.SendAsync(reminder.RecipientPhone, message);
 
                 if (success)
                 {
                     await reminderService.MarkAsSentAsync(reminder.Id);
-                    _logger.LogInformation("Reminder {Id} sent to {Phone}.", reminder.Id, reminder.RecipientPhone);
+                    _logger.LogInformation("Reminder {Id} sent to {Phone} via Tenant Provider.", reminder.Id, reminder.RecipientPhone);
                 }
                 else
                 {

@@ -13,13 +13,35 @@ using ReceptionistAgent.Api.Security;
 using ReceptionistAgent.Core.Security;
 using ReceptionistAgent.Core.Services;
 using ReceptionistAgent.Api.Services;
+using ReceptionistAgent.AI.Services;
 using ReceptionistAgent.Core.Session;
 using ReceptionistAgent.Core.Tenant;
 using Microsoft.SemanticKernel;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+
 var builder = WebApplication.CreateBuilder(args);
+
+// Add JWT Authentication
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        var secretKey = builder.Configuration["Jwt:Key"] ?? "SUPER_SECRET_JWT_KEY_CHANGE_ME_IN_PRODUCTION!!!!";
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "ReceptionistAI",
+            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "ReceptionistAI_ClientDashboard",
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(secretKey))
+        };
+    });
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -128,16 +150,12 @@ builder.Services.AddSingleton<IReminderService>(
     _ => new SqlReminderService(coreConnStr));
 builder.Services.AddSingleton<SqlMetricsRepository>(
     _ => new SqlMetricsRepository(coreConnStr));
-builder.Services.AddSingleton<IMessageSender>(sp =>
-{
-    var config = sp.GetRequiredService<IConfiguration>();
-    var logger = sp.GetRequiredService<ILogger<TwilioMessageSender>>();
-    return new TwilioMessageSender(
-        config["Twilio:AccountSid"] ?? "",
-        config["Twilio:AuthToken"] ?? "",
-        config["Twilio:FromNumber"] ?? "",
-        logger);
-});
+
+// Register HTTP Client for Meta API
+builder.Services.AddHttpClient("MetaGraphApi");
+
+// Register Factory for multi-tenant messaging (Twilio/Meta)
+builder.Services.AddSingleton<IMessageSenderFactory, MessageSenderFactory>();
 
 // Background service for sending reminders
 builder.Services.AddHostedService<ReminderBackgroundService>();
@@ -146,6 +164,7 @@ builder.Services.AddTransient<ApiKeyAuthFilter>();
 
 // Scoped: resuelto por request via middleware
 builder.Services.AddScoped<TenantContext>();
+builder.Services.AddScoped<IEscalationService, EscalationService>();
 builder.Services.AddScoped<ISessionContext, SessionContext>();
 
 // IClientDataAdapter scoped: creado per-tenant via factory
@@ -195,8 +214,12 @@ builder.Services.AddScoped<Kernel>(sp =>
     var sessionContext = sp.GetRequiredService<ISessionContext>();
     var logger = sp.GetRequiredService<ILogger<BookingPlugin>>();
     var reminderService = sp.GetService<IReminderService>();
+    var escalationService = sp.GetRequiredService<IEscalationService>();
+    var escalationLogger = loggerFactory.CreateLogger<ReceptionistAgent.AI.Plugins.EscalationPlugin>();
+
     kernel.Plugins.AddFromObject(new BookingPlugin(bookingService, sessionContext, tenantContext, logger, reminderService), "BookingPlugin");
     kernel.Plugins.AddFromObject(new BusinessInfoPlugin(adapter, tenantContext), "BusinessInfoPlugin");
+    kernel.Plugins.AddFromObject(new ReceptionistAgent.AI.Plugins.EscalationPlugin(escalationLogger, escalationService, tenantContext.CurrentTenant?.TenantId ?? "", sessionContext.SessionId), "EscalationPlugin");
 
     return kernel;
 });
@@ -225,6 +248,7 @@ app.UseMiddleware<TenantMiddleware>();
 // Session context middleware (después de tenant)
 app.UseMiddleware<SessionContextMiddleware>();
 
+app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter(); // Apply rate limiting BEFORE controllers
 
