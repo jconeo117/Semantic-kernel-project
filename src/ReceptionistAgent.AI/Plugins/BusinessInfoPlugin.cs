@@ -39,35 +39,4 @@ public class BusinessInfoPlugin
                string.Join("\n", providers.Select(p => $"- {p.Name} ({p.Role})"));
     }
 
-    [KernelFunction]
-    [Description("Información sobre ubicación, horarios y servicios del negocio")]
-    public string GetBusinessInfo(
-        [Description("Tipo: ubicacion, horarios, servicios, seguros, precios")] string infoType)
-    {
-        var tenant = _tenantContext.CurrentTenant;
-
-        if (tenant == null)
-            return "Información del negocio no disponible.";
-
-        return infoType.ToLower() switch
-        {
-            "ubicacion" => $"{tenant.BusinessName}\n{tenant.Address}\nTeléfono: {tenant.Phone}",
-
-            "horarios" => $"Horarios de atención:\n{tenant.WorkingHours}",
-
-            "servicios" => tenant.Services.Any()
-                ? $"Servicios disponibles:\n{string.Join("\n", tenant.Services.Select(s => $"- {s}"))}"
-                : "Consultar servicios disponibles con el negocio.",
-
-            "seguros" => tenant.AcceptedInsurance.Any()
-                ? $"Seguros aceptados:\n{string.Join("\n", tenant.AcceptedInsurance.Select(i => $"- {i}"))}"
-                : "No aplica o consultar con el negocio.",
-
-            "precios" => tenant.Pricing.Any()
-                ? string.Join("\n", tenant.Pricing.Select(p => $"- {p.Key}: {p.Value}"))
-                : "Consultar precios en el establecimiento.",
-
-            _ => "Tipos de información disponibles: ubicacion, horarios, servicios, seguros, precios"
-        };
-    }
 }
