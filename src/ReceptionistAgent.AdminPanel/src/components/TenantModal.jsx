@@ -7,7 +7,7 @@ const TABS = [
   { id: "database", label: "Base de Datos" },
 ];
 
-export default function TenantModal({ data, onClose, onSuspend, onReactivate }) {
+export default function TenantModal({ data, onClose, onSuspend, onReactivate, onEdit }) {
   const { colors: C, styles: s } = useTheme();
   const { tenant, billing } = data;
   const [loading, setLoading] = useState(false);
@@ -111,6 +111,7 @@ export default function TenantModal({ data, onClose, onSuspend, onReactivate }) 
 
         <div style={s.divider} />
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button style={s.btn()} onClick={() => onEdit(tenant)}>Editar</button>
           {billing.billingStatus === "Active" ? (
             <button style={s.btn("danger")} onClick={handleSuspend} disabled={loading}>
               {loading ? "..." : "Suspender"}

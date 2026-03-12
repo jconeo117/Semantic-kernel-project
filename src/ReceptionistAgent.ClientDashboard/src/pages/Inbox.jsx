@@ -3,13 +3,11 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { 
-  LogOut, AlertCircle, CheckCircle2, Search, Send,
-  User, MessageSquare, Clock, ShieldAlert, Bot
-} from 'lucide-react';
+import { LogOut, AlertCircle, CheckCircle2, Search, Send, User, MessageSquare, Clock, ShieldAlert, Bot } from 'lucide-react';
+import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
 
 const Inbox = () => {
-  const { logout, tenant } = useAuth();
+  const { logout, tenant, token } = useAuth();
   const [sessions, setSessions] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
   const [history, setHistory] = useState([]);
@@ -17,24 +15,53 @@ const Inbox = () => {
   const [isSending, setIsSending] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const messagesEndRef = useRef(null);
+  const activeSessionRef = useRef(activeSession);
+  const connectionRef = useRef(null);
 
-  // Poll sessions periodically
+  // Keep ref up to date to access inside SignalR callbacks without stale closures
   useEffect(() => {
-    fetchSessions();
-    const intervalId = setInterval(fetchSessions, 10000); // refresh every 10s
-    return () => clearInterval(intervalId);
-  }, []);
+    activeSessionRef.current = activeSession;
+  }, [activeSession]);
 
-  // Fetch history when active session changes
+  useEffect(() => {
+    // Initial data fetch
+    fetchSessions();
+    
+    // 1. Establish SignalR WebSockets Connection
+    const connection = new HubConnectionBuilder()
+        .withUrl("http://localhost:5083/hubs/dashboard", {
+            accessTokenFactory: () => token
+        })
+        .configureLogging(LogLevel.Information)
+        .withAutomaticReconnect()
+        .build();
+
+    connectionRef.current = connection;
+
+    // 2. Define exactly what happens when the DashboardHub pushes an event
+    connection.on("ReceiveSessionUpdate", () => {
+        console.log("⚡ SignalR WebSockets: Notification received! Updating Inbox UI.");
+        fetchSessions();
+        if (activeSessionRef.current) {
+            fetchHistory(activeSessionRef.current.id);
+        }
+    });
+
+    // 3. Start Connection
+    connection.start()
+        .then(() => console.log('🟢 SignalR WebSockets Connected'))
+        .catch(err => console.error('🔴 SignalR Connection Error: ', err));
+
+    // Cleanup on unmount
+    return () => {
+      connection.stop();
+    };
+  }, []); // Run ONCE on component mount
+
+  // Fetch history specifically when the active session changes manually by the user click
   useEffect(() => {
     if (activeSession) {
       fetchHistory(activeSession.id);
-      
-      const intervalId = setInterval(() => {
-        fetchHistory(activeSession.id);
-      }, 5000); // refresh history every 5s while chatting
-      
-      return () => clearInterval(intervalId);
     } else {
       setHistory([]);
     }
@@ -96,10 +123,12 @@ const Inbox = () => {
     }
   };
 
-  const filteredSessions = sessions.filter(s => 
-    s.userPhone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.id.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredSessions = sessions.filter(s => {
+    const search = (searchTerm || "").toLowerCase();
+    const phone = (s.userPhone || "").toLowerCase();
+    const id = (s.id || "").toLowerCase();
+    return phone.includes(search) || id.includes(search);
+  });
 
   return (
     <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-950 font-sans mx-auto max-w-[1600px] shadow-2xl overflow-hidden">
@@ -240,11 +269,15 @@ const Inbox = () => {
           {/* Chat Messages */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 md:space-y-6">
             {history.map((msg, index) => {
-              // Ignore system prompts to maintain a cleaner view
-              if (msg.Role.toLowerCase() === 'system') return null;
+              // Handle possible camelCase or PascalCase from JSON serialization
+              const role = (msg.role || msg.Role || "").toLowerCase();
+              const content = (msg.content || msg.Content || "");
 
-              const isUser = msg.Role.toLowerCase() === 'user';
-              const isHumanAgent = msg.Role.toLowerCase() === 'assistant' && msg.Content.includes("[Agente Humano]");
+              // Ignore system prompts to maintain a cleaner view
+              if (role === 'system') return null;
+
+              const isUser = role === 'user';
+              const isHumanAgent = role === 'assistant' && content.includes("[Agente Humano]");
               
               let bubbleColor = isUser
                 ? "bg-white border-slate-200 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 rounded-br-none" 
@@ -274,7 +307,7 @@ const Inbox = () => {
                     )}
 
                     <p className="whitespace-pre-wrap font-medium">
-                      {isHumanAgent ? msg.Content.replace("[Agente Humano]: ", "") : msg.Content}
+                      {isHumanAgent ? content.replace("[Agente Humano]: ", "") : content}
                     </p>
                   </div>
                 </div>

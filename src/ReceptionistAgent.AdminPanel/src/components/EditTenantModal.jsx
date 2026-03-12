@@ -1,30 +1,45 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTheme } from "../styles/tokens";
 
 const BUSINESS_TYPES = ["clinic", "salon", "wellness", "nails", "workshop", "restaurant", "gym", "other"];
 const DB_TYPES = ["InMemory", "SqlServer"];
 const TIMEZONES = ["America/Bogota", "America/New_York", "America/Mexico_City", "America/Lima", "America/Santiago", "UTC"];
+const MESSAGE_PROVIDERS = ["Twilio", "Meta"];
 
 const emptyProvider = () => ({
   id: "", name: "", role: "", workingDays: [],
   startTime: "09:00", endTime: "18:00", slotDurationMinutes: 30,
 });
 
-const STEPS = ["Básicos", "Base de Datos", "Servicios", "Providers"];
+const STEPS = ["Básicos", "Base de Datos", "Mensajería", "Servicios", "Providers"];
 
-export default function CreateTenantModal({ onClose, onCreate }) {
+export default function EditTenantModal({ initialData, onClose, onUpdate }) {
   const { colors: C, styles: s } = useTheme();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const [form, setForm] = useState({
-    tenantId: "", businessName: "", businessType: "clinic",
-    username: "", passwordHash: "",
-    timeZoneId: "America/Bogota", address: "", phone: "", workingHours: "",
-    dbType: "InMemory", connectionString: "",
-    services: [""],
-    providers: [emptyProvider()],
+  const [form, setForm] = useState(() => {
+    const t = initialData || {};
+    return {
+      tenantId: t.tenantId || "",
+      businessName: t.businessName || "",
+      businessType: t.businessType || "clinic",
+      username: t.username || "",
+      passwordHash: t.passwordHash || "",
+      timeZoneId: t.timeZoneId || "America/Bogota",
+      address: t.address || "",
+      phone: t.phone || "",
+      workingHours: t.workingHours || "",
+      dbType: t.dbType || "InMemory",
+      connectionString: t.connectionString || "",
+      messageProvider: t.messageProvider || "Twilio",
+      messageProviderAccount: t.messageProviderAccount || "",
+      messageProviderToken: t.messageProviderToken || "",
+      messageProviderPhone: t.messageProviderPhone || "",
+      services: (t.services?.length ? t.services : [""]),
+      providers: (t.providers?.length ? t.providers : [emptyProvider()]),
+    };
   });
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
@@ -36,7 +51,7 @@ export default function CreateTenantModal({ onClose, onCreate }) {
   const updateProvider = (i, key, val) => { const copy = [...form.providers]; copy[i] = { ...copy[i], [key]: val }; set("providers", copy); };
 
   const canNext = () => {
-    if (step === 0) return form.tenantId.trim() && form.businessName.trim();
+    if (step === 0) return form.businessName.trim();
     if (step === 1) return form.dbType === "InMemory" || form.connectionString.trim();
     return true;
   };
@@ -46,7 +61,7 @@ export default function CreateTenantModal({ onClose, onCreate }) {
     setError(null);
     try {
       const payload = {
-        tenantId: form.tenantId.trim().toLowerCase().replace(/\s+/g, "-"),
+        tenantId: form.tenantId, // Cannot be edited, but needed in payload
         businessName: form.businessName.trim(),
         username: form.username.trim() || undefined,
         passwordHash: form.passwordHash.trim() || undefined,
@@ -57,6 +72,10 @@ export default function CreateTenantModal({ onClose, onCreate }) {
         workingHours: form.workingHours.trim(),
         dbType: form.dbType,
         connectionString: form.dbType === "SqlServer" ? form.connectionString.trim() : "",
+        messageProvider: form.messageProvider,
+        messageProviderAccount: form.messageProviderAccount.trim(),
+        messageProviderToken: form.messageProviderToken.trim(),
+        messageProviderPhone: form.messageProviderPhone.trim(),
         services: form.services.filter(sv => sv.trim()),
         providers: form.providers.filter(p => p.id.trim() && p.name.trim()).map(p => ({
           id: p.id.trim(), name: p.name.trim(), role: p.role.trim(),
@@ -64,10 +83,10 @@ export default function CreateTenantModal({ onClose, onCreate }) {
           slotDurationMinutes: parseInt(p.slotDurationMinutes) || 30,
         })),
       };
-      await onCreate(payload);
+      await onUpdate(form.tenantId, payload);
       onClose();
     } catch (err) {
-      setError(err.response?.data?.error || err.message || "Error al crear tenant");
+      setError(err.response?.data?.error || err.message || "Error al actualizar tenant");
       setLoading(false);
     }
   };
@@ -81,7 +100,7 @@ export default function CreateTenantModal({ onClose, onCreate }) {
       <div style={{ ...s.modalBox, width: 560 }} onClick={e => e.stopPropagation()} className="fade-in">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em" }}>+ Nuevo Tenant</div>
+            <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em" }}>Editar Tenant</div>
             <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>Paso {step + 1} de {STEPS.length} — {STEPS[step]}</div>
           </div>
           <button style={s.btn()} onClick={onClose}>✕</button>
@@ -95,8 +114,8 @@ export default function CreateTenantModal({ onClose, onCreate }) {
 
         {step === 0 && (
           <div className="fade-in">
-            <label style={labelStyle}>Tenant ID *</label>
-            <input style={inputStyle} placeholder="ej: clinica-salud-total" value={form.tenantId} onChange={e => set("tenantId", e.target.value)} />
+            <label style={labelStyle}>Tenant ID (Solo lectura)</label>
+            <input style={{...inputStyle, background: C.surfaceHover, color: C.textDim}} disabled value={form.tenantId} />
             <label style={labelStyle}>Nombre del Negocio *</label>
             <input style={inputStyle} placeholder="ej: Clínica Salud Total" value={form.businessName} onChange={e => set("businessName", e.target.value)} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -106,7 +125,7 @@ export default function CreateTenantModal({ onClose, onCreate }) {
               </div>
               <div>
                 <label style={labelStyle}>Contraseña</label>
-                <input style={inputStyle} type="password" placeholder="••••••••" value={form.passwordHash} onChange={e => set("passwordHash", e.target.value)} />
+                <input style={inputStyle} type="text" placeholder="••••••••" value={form.passwordHash} onChange={e => set("passwordHash", e.target.value)} />
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -163,6 +182,27 @@ export default function CreateTenantModal({ onClose, onCreate }) {
 
         {step === 2 && (
           <div className="fade-in">
+             <label style={labelStyle}>Proveedor de Mensajería</label>
+             <select style={selectStyle} value={form.messageProvider} onChange={e => set("messageProvider", e.target.value)}>
+               {MESSAGE_PROVIDERS.map(t => <option key={t} value={t}>{t}</option>)}
+             </select>
+             
+             <label style={labelStyle}>Account SID / Phone Number ID</label>
+             <input style={inputStyle} placeholder="Dejar en blanco para usar el global / sandbox" value={form.messageProviderAccount} onChange={e => set("messageProviderAccount", e.target.value)} />
+             
+             <label style={labelStyle}>Auth Token / Access Token</label>
+             <input style={inputStyle} placeholder="Dejar en blanco para usar el global / sandbox" value={form.messageProviderToken} onChange={e => set("messageProviderToken", e.target.value)} />
+
+             <label style={labelStyle}>Número de Envío (WhatsApp)</label>
+             <input style={inputStyle} placeholder={"ej: whatsapp:+18881234567"} value={form.messageProviderPhone} onChange={e => set("messageProviderPhone", e.target.value)} />
+             <div style={{ fontSize: 10, color: C.textDim, marginTop: -6, marginBottom: 12 }}>
+                ⓘ Si los campos se dejan vacíos el sistema usará el Sandbox de manera global automáticamente.
+             </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="fade-in">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <label style={{ ...labelStyle, marginBottom: 0 }}>Servicios</label>
               <button style={s.btn()} onClick={addService}>+ Agregar</button>
@@ -176,7 +216,7 @@ export default function CreateTenantModal({ onClose, onCreate }) {
           </div>
         )}
 
-        {step === 3 && (
+        {step === 4 && (
           <div className="fade-in">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <label style={{ ...labelStyle, marginBottom: 0 }}>Providers ({form.providers.length})</label>
@@ -214,7 +254,7 @@ export default function CreateTenantModal({ onClose, onCreate }) {
             {step < STEPS.length - 1 ? (
               <button style={s.btn("accent")} disabled={!canNext()} onClick={() => setStep(step + 1)}>Siguiente →</button>
             ) : (
-              <button style={s.btn("accent")} disabled={loading || !canNext()} onClick={handleSubmit}>{loading ? "Creando..." : "Crear Tenant"}</button>
+              <button style={s.btn("accent")} disabled={loading || !canNext()} onClick={handleSubmit}>{loading ? "Guardando..." : "Guardar Cambios"}</button>
             )}
           </div>
         </div>

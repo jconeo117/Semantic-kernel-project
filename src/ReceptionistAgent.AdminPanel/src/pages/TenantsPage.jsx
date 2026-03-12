@@ -3,7 +3,8 @@ import { useTheme, planColor, statusColor, businessIcon, fmt } from "../styles/t
 import { LoadingState, ErrorBanner } from "../components/Feedback";
 import TenantModal from "../components/TenantModal";
 import CreateTenantModal from "../components/CreateTenantModal";
-import { fetchTenants, fetchTenantById, suspendTenant, reactivateTenant, createTenant } from "../api/client";
+import EditTenantModal from "../components/EditTenantModal";
+import { fetchTenants, fetchTenantById, suspendTenant, reactivateTenant, createTenant, updateTenant } from "../api/client";
 
 export default function TenantsPage({ onToast }) {
   const { colors: C, styles: s } = useTheme();
@@ -12,6 +13,7 @@ export default function TenantsPage({ onToast }) {
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showEdit, setShowEdit] = useState(null);
   const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
@@ -69,6 +71,12 @@ export default function TenantsPage({ onToast }) {
   const handleCreate = async (payload) => {
     await createTenant(payload);
     onToast?.("Tenant creado correctamente", "success");
+    await load();
+  };
+
+  const handleUpdate = async (tenantId, payload) => {
+    await updateTenant(tenantId, payload);
+    onToast?.("Tenant actualizado correctamente", "success");
     await load();
   };
 
@@ -138,11 +146,16 @@ export default function TenantsPage({ onToast }) {
 
       {selected && (
         <TenantModal data={selected} onClose={() => setSelected(null)}
-          onSuspend={handleSuspend} onReactivate={handleReactivate} />
+          onSuspend={handleSuspend} onReactivate={handleReactivate} 
+          onEdit={(t) => { setSelected(null); setShowEdit(t); }} />
       )}
 
       {showCreate && (
         <CreateTenantModal onClose={() => setShowCreate(false)} onCreate={handleCreate} />
+      )}
+
+      {showEdit && (
+        <EditTenantModal initialData={showEdit} onClose={() => setShowEdit(null)} onUpdate={handleUpdate} />
       )}
     </div>
   );
