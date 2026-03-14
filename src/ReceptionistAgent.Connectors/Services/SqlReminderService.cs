@@ -2,6 +2,7 @@ using Dapper;
 using Microsoft.Data.SqlClient;
 using ReceptionistAgent.Core.Models;
 using ReceptionistAgent.Core.Services;
+using ReceptionistAgent.Core.Utils;
 
 namespace ReceptionistAgent.Connectors.Services;
 
@@ -18,8 +19,9 @@ public class SqlReminderService : IReminderService
         _connectionString = connectionString;
     }
 
-    public async Task ScheduleRemindersForBookingAsync(BookingRecord booking, string recipientPhone)
+    public async Task ScheduleRemindersForBookingAsync(BookingRecord booking, string recipientPhone, string PhoneCountryCode)
     {
+        var NormalizePhone = PhoneNormalizer.Normalize(recipientPhone, PhoneCountryCode);
         var appointmentDateTimeUtc = booking.ScheduledDate.Date + booking.ScheduledTime;
 
         var reminders = new List<Reminder>
@@ -31,7 +33,7 @@ public class SqlReminderService : IReminderService
                 BookingId = booking.Id,
                 ReminderType = ReminderType.Before24h,
                 ScheduledFor = appointmentDateTimeUtc.AddHours(-24),
-                RecipientPhone = recipientPhone,
+                RecipientPhone = NormalizePhone,
                 MessageContent = $"Recordatorio: Tiene una cita mañana {booking.ScheduledDate:yyyy-MM-dd} a las {booking.ScheduledTime:hh\\:mm} con {booking.ProviderName}. Código: {booking.ConfirmationCode}. Recuerde llegar 15 minutos antes."
             },
             // Recordatorio 1h antes
@@ -41,7 +43,7 @@ public class SqlReminderService : IReminderService
                 BookingId = booking.Id,
                 ReminderType = ReminderType.Before1h,
                 ScheduledFor = appointmentDateTimeUtc.AddHours(-1),
-                RecipientPhone = recipientPhone,
+                RecipientPhone = NormalizePhone,
                 MessageContent = $"Recordatorio: Su cita es en 1 hora ({booking.ScheduledTime:hh\\:mm}) con {booking.ProviderName}. Código: {booking.ConfirmationCode}."
             }
         };

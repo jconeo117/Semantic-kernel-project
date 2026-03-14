@@ -6,11 +6,6 @@ using System.Text.Json;
 
 namespace ReceptionistAgent.Connectors.Repositories;
 
-/// <summary>
-/// Implementación de ITenantResolver respaldada por SQL Server.
-/// Reemplaza a InMemoryTenantResolver para producción.
-/// Lee de tablas Tenants + TenantProviders.
-/// </summary>
 public class SqlTenantRepository : ITenantResolver
 {
     private readonly string _connectionString;
@@ -30,12 +25,29 @@ public class SqlTenantRepository : ITenantResolver
 
         using var connection = new SqlConnection(_connectionString);
         var entity = await connection.QuerySingleOrDefaultAsync<TenantEntity>(tenantSql, new { TenantId = tenantId });
-
-        if (entity == null)
-            return null;
+        if (entity == null) return null;
 
         var providerEntities = (await connection.QueryAsync<ProviderEntity>(providersSql, new { TenantId = tenantId })).ToList();
+        return MapToConfiguration(entity, providerEntities);
+    }
 
+    // Nuevo: permite buscar tenant por su PhoneNumberId de Meta (para webhook multi-tenant)
+    public async Task<TenantConfiguration?> ResolveByMetaPhoneNumberIdAsync(string phoneNumberId)
+    {
+        if (string.IsNullOrWhiteSpace(phoneNumberId)) return null;
+
+        const string tenantSql = @"
+            SELECT * FROM Tenants
+            WHERE MessageProviderAccount = @PhoneNumberId
+              AND MessageProvider = 'Meta'
+              AND IsActive = 1";
+        const string providersSql = "SELECT * FROM TenantProviders WHERE TenantId = @TenantId AND IsActive = 1";
+
+        using var connection = new SqlConnection(_connectionString);
+        var entity = await connection.QuerySingleOrDefaultAsync<TenantEntity>(tenantSql, new { PhoneNumberId = phoneNumberId });
+        if (entity == null) return null;
+
+        var providerEntities = (await connection.QueryAsync<ProviderEntity>(providersSql, new { TenantId = entity.TenantId })).ToList();
         return MapToConfiguration(entity, providerEntities);
     }
 
@@ -43,8 +55,7 @@ public class SqlTenantRepository : ITenantResolver
     {
         const string sql = "SELECT TenantId FROM Tenants WHERE IsActive = 1";
         using var connection = new SqlConnection(_connectionString);
-        var ids = await connection.QueryAsync<string>(sql);
-        return ids.ToList();
+        return (await connection.QueryAsync<string>(sql)).ToList();
     }
 
     public async Task<TenantConfiguration?> AuthenticateAsync(string username, string password)
@@ -56,12 +67,9 @@ public class SqlTenantRepository : ITenantResolver
 
         using var connection = new SqlConnection(_connectionString);
         var entity = await connection.QuerySingleOrDefaultAsync<TenantEntity>(tenantSql, new { Username = username, PasswordHash = password });
-
-        if (entity == null)
-            return null;
+        if (entity == null) return null;
 
         var providerEntities = (await connection.QueryAsync<ProviderEntity>(providersSql, new { TenantId = entity.TenantId })).ToList();
-
         return MapToConfiguration(entity, providerEntities);
     }
 
@@ -84,40 +92,27 @@ public class SqlTenantRepository : ITenantResolver
     public async Task<TenantConfiguration> CreateAsync(TenantConfiguration tenant)
     {
         const string sql = @"
-            INSERT INTO Tenants (TenantId, BusinessName, BusinessType, DbType, ConnectionString,
-                TimeZoneId, Address, Phone, WorkingHours, Services, AcceptedInsurance,
-                Pricing, CustomSettings, Username, PasswordHash, IsActive, CreatedAt)
-            VALUES (@TenantId, @BusinessName, @BusinessType, @DbType, @ConnectionString,
-                @TimeZoneId, @Address, @Phone, @WorkingHours, @Services, @AcceptedInsurance,
-                @Pricing, @CustomSettings, @Username, @PasswordHash, @IsActive, @CreatedAt)";
+            INSERT INTO Tenants (
+                TenantId, BusinessName, BusinessType, DbType, ConnectionString,
+                TimeZoneId, PhoneCountryCode, Address, Phone, WorkingHours,
+                Services, AcceptedInsurance, Pricing, CustomSettings,
+                Username, PasswordHash,
+                MessageProvider, MessageProviderAccount, MessageProviderToken, MessageProviderPhone,
+                IsActive, CreatedAt
+            ) VALUES (
+                @TenantId, @BusinessName, @BusinessType, @DbType, @ConnectionString,
+                @TimeZoneId, @PhoneCountryCode, @Address, @Phone, @WorkingHours,
+                @Services, @AcceptedInsurance, @Pricing, @CustomSettings,
+                @Username, @PasswordHash,
+                @MessageProvider, @MessageProviderAccount, @MessageProviderToken, @MessageProviderPhone,
+                @IsActive, @CreatedAt
+            )";
 
         using var connection = new SqlConnection(_connectionString);
-        await connection.ExecuteAsync(sql, new
-        {
-            tenant.TenantId,
-            tenant.BusinessName,
-            tenant.BusinessType,
-            tenant.DbType,
-            tenant.ConnectionString,
-            tenant.TimeZoneId,
-            tenant.Address,
-            tenant.Phone,
-            tenant.WorkingHours,
-            Services = JsonSerializer.Serialize(tenant.Services),
-            AcceptedInsurance = JsonSerializer.Serialize(tenant.AcceptedInsurance),
-            Pricing = JsonSerializer.Serialize(tenant.Pricing),
-            CustomSettings = JsonSerializer.Serialize(tenant.CustomSettings),
-            Username = tenant.Username,
-            PasswordHash = tenant.PasswordHash,
-            tenant.IsActive,
-            tenant.CreatedAt
-        });
+        await connection.ExecuteAsync(sql, BuildParams(tenant));
 
-        // Insert providers
         foreach (var provider in tenant.Providers)
-        {
             await InsertProviderAsync(connection, tenant.TenantId, provider);
-        }
 
         return tenant;
     }
@@ -126,60 +121,75 @@ public class SqlTenantRepository : ITenantResolver
     {
         const string sql = @"
             UPDATE Tenants SET
-                BusinessName = @BusinessName, BusinessType = @BusinessType,
-                DbType = @DbType, ConnectionString = @ConnectionString,
-                TimeZoneId = @TimeZoneId, Address = @Address, Phone = @Phone,
-                WorkingHours = @WorkingHours, Services = @Services,
-                AcceptedInsurance = @AcceptedInsurance, Pricing = @Pricing,
-                CustomSettings = @CustomSettings, Username = @Username, PasswordHash = @PasswordHash,
-                IsActive = @IsActive, UpdatedAt = @UpdatedAt
+                BusinessName           = @BusinessName,
+                BusinessType           = @BusinessType,
+                DbType                 = @DbType,
+                ConnectionString       = @ConnectionString,
+                TimeZoneId             = @TimeZoneId,
+                PhoneCountryCode       = @PhoneCountryCode,
+                Address                = @Address,
+                Phone                  = @Phone,
+                WorkingHours           = @WorkingHours,
+                Services               = @Services,
+                AcceptedInsurance      = @AcceptedInsurance,
+                Pricing                = @Pricing,
+                CustomSettings         = @CustomSettings,
+                Username               = @Username,
+                PasswordHash           = @PasswordHash,
+                MessageProvider        = @MessageProvider,
+                MessageProviderAccount = @MessageProviderAccount,
+                MessageProviderToken   = @MessageProviderToken,
+                MessageProviderPhone   = @MessageProviderPhone,
+                IsActive               = @IsActive,
+                UpdatedAt              = @UpdatedAt
             WHERE TenantId = @TenantId";
 
         using var connection = new SqlConnection(_connectionString);
-        await connection.ExecuteAsync(sql, new
-        {
-            tenant.TenantId,
-            tenant.BusinessName,
-            tenant.BusinessType,
-            tenant.DbType,
-            tenant.ConnectionString,
-            tenant.TimeZoneId,
-            tenant.Address,
-            tenant.Phone,
-            tenant.WorkingHours,
-            Services = JsonSerializer.Serialize(tenant.Services),
-            AcceptedInsurance = JsonSerializer.Serialize(tenant.AcceptedInsurance),
-            Pricing = JsonSerializer.Serialize(tenant.Pricing),
-            CustomSettings = JsonSerializer.Serialize(tenant.CustomSettings),
-            Username = tenant.Username,
-            PasswordHash = tenant.PasswordHash,
-            tenant.IsActive,
-            UpdatedAt = DateTime.UtcNow
-        });
+        await connection.ExecuteAsync(sql, BuildParams(tenant));
 
-        // Replace providers: delete existing, insert new
-        await connection.ExecuteAsync(
-            "DELETE FROM TenantProviders WHERE TenantId = @TenantId",
-            new { tenant.TenantId });
-
+        await connection.ExecuteAsync("DELETE FROM TenantProviders WHERE TenantId = @TenantId", new { tenant.TenantId });
         foreach (var provider in tenant.Providers)
-        {
             await InsertProviderAsync(connection, tenant.TenantId, provider);
-        }
 
         return tenant;
     }
 
     public async Task<bool> DeleteAsync(string tenantId)
     {
-        // Soft delete
         const string sql = "UPDATE Tenants SET IsActive = 0, UpdatedAt = @Now WHERE TenantId = @TenantId";
         using var connection = new SqlConnection(_connectionString);
         var rows = await connection.ExecuteAsync(sql, new { TenantId = tenantId, Now = DateTime.UtcNow });
         return rows > 0;
     }
 
-    // ────────────────────── Private Helpers ──────────────────────
+    // ─── Private helpers ──────────────────────────────────────────────────────
+
+    private static object BuildParams(TenantConfiguration t) => new
+    {
+        t.TenantId,
+        t.BusinessName,
+        t.BusinessType,
+        t.DbType,
+        t.ConnectionString,
+        t.TimeZoneId,
+        t.PhoneCountryCode,
+        t.Address,
+        t.Phone,
+        t.WorkingHours,
+        Services = JsonSerializer.Serialize(t.Services),
+        AcceptedInsurance = JsonSerializer.Serialize(t.AcceptedInsurance),
+        Pricing = JsonSerializer.Serialize(t.Pricing),
+        CustomSettings = JsonSerializer.Serialize(t.CustomSettings),
+        t.Username,
+        t.PasswordHash,
+        t.MessageProvider,
+        t.MessageProviderAccount,
+        t.MessageProviderToken,
+        t.MessageProviderPhone,
+        t.IsActive,
+        t.CreatedAt,
+        UpdatedAt = DateTime.UtcNow
+    };
 
     private static async Task InsertProviderAsync(SqlConnection connection, string tenantId, TenantProviderConfig provider)
     {
@@ -210,6 +220,7 @@ public class SqlTenantRepository : ITenantResolver
             DbType = entity.DbType ?? "InMemory",
             ConnectionString = entity.ConnectionString ?? "",
             TimeZoneId = entity.TimeZoneId ?? "UTC",
+            PhoneCountryCode = entity.PhoneCountryCode ?? "",
             Address = entity.Address ?? "",
             Phone = entity.Phone ?? "",
             WorkingHours = entity.WorkingHours ?? "",
@@ -219,6 +230,10 @@ public class SqlTenantRepository : ITenantResolver
             CustomSettings = DeserializeJson<Dictionary<string, object>>(entity.CustomSettings) ?? new(),
             Username = entity.Username,
             PasswordHash = entity.PasswordHash,
+            MessageProvider = entity.MessageProvider ?? "Meta",
+            MessageProviderAccount = entity.MessageProviderAccount ?? "",
+            MessageProviderToken = entity.MessageProviderToken ?? "",
+            MessageProviderPhone = entity.MessageProviderPhone ?? "",
             IsActive = entity.IsActive,
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt,
@@ -242,7 +257,7 @@ public class SqlTenantRepository : ITenantResolver
         catch { return default; }
     }
 
-    // ────────────────────── Dapper Entities ──────────────────────
+    // ─── Dapper entities ──────────────────────────────────────────────────────
 
     private class TenantEntity
     {
@@ -252,6 +267,7 @@ public class SqlTenantRepository : ITenantResolver
         public string? DbType { get; set; }
         public string? ConnectionString { get; set; }
         public string? TimeZoneId { get; set; }
+        public string? PhoneCountryCode { get; set; }
         public string? Address { get; set; }
         public string? Phone { get; set; }
         public string? WorkingHours { get; set; }
@@ -261,6 +277,10 @@ public class SqlTenantRepository : ITenantResolver
         public string? CustomSettings { get; set; }
         public string? Username { get; set; }
         public string? PasswordHash { get; set; }
+        public string? MessageProvider { get; set; }
+        public string? MessageProviderAccount { get; set; }
+        public string? MessageProviderToken { get; set; }
+        public string? MessageProviderPhone { get; set; }
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }

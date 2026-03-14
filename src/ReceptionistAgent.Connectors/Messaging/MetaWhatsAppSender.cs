@@ -8,7 +8,7 @@ namespace ReceptionistAgent.Connectors.Messaging;
 
 /// <summary>
 /// Envía mensajes outbound por la Meta Cloud API oficial de WhatsApp Business.
-/// Requiere estar configurado en TenantConfiguration con ProviderType = "Meta".
+/// Graph API v22.0 — números en formato E.164 con prefijo +
 /// </summary>
 public class MetaWhatsAppSender : IMessageSender
 {
@@ -16,6 +16,9 @@ public class MetaWhatsAppSender : IMessageSender
     private readonly ILogger _logger;
     private readonly string _phoneNumberId;
     private readonly string _accessToken;
+
+    // Versión de la Graph API. Actualizar cuando Meta deprece la versión actual.
+    private const string GraphApiVersion = "v22.0";
 
     public MetaWhatsAppSender(HttpClient httpClient, string phoneNumberId, string accessToken, ILogger logger)
     {
@@ -29,8 +32,14 @@ public class MetaWhatsAppSender : IMessageSender
     {
         try
         {
-            // Clean phone number: remove 'whatsapp:' prefix if exists and '+'
-            var cleanPhone = to.Replace("whatsapp:", "").Replace("+", "");
+            // Normalizar a E.164 con prefijo + (requerido por Meta Cloud API)
+            // Twilio prefija con "whatsapp:", Meta no lo usa
+            var cleanPhone = to
+                .Replace("whatsapp:", "", StringComparison.OrdinalIgnoreCase)
+                .Trim();
+
+            if (!cleanPhone.StartsWith("+"))
+                cleanPhone = "+" + cleanPhone;
 
             var payload = new
             {
@@ -44,7 +53,9 @@ public class MetaWhatsAppSender : IMessageSender
             var json = JsonSerializer.Serialize(payload);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var request = new HttpRequestMessage(HttpMethod.Post, $"https://graph.facebook.com/v19.0/{_phoneNumberId}/messages")
+            var request = new HttpRequestMessage(
+                HttpMethod.Post,
+                $"https://graph.facebook.com/{GraphApiVersion}/{_phoneNumberId}/messages")
             {
                 Content = content
             };
@@ -55,19 +66,18 @@ public class MetaWhatsAppSender : IMessageSender
 
             if (response.IsSuccessStatusCode)
             {
-                _logger.LogInformation("Meta message sent to {To}. Response: {Response}", to, responseBody);
+                _logger.LogInformation("Meta message sent to {To}. PhoneId: {PhoneId}", cleanPhone, _phoneNumberId);
                 return true;
             }
-            else
-            {
-                _logger.LogError("Failed to send Meta message to {To}. Status: {Status}, Body: {Body}",
-                    to, response.StatusCode, responseBody);
-                return false;
-            }
+
+            _logger.LogError(
+                "Meta message failed. To: {To}, Status: {Status}, Body: {Body}",
+                cleanPhone, response.StatusCode, responseBody);
+            return false;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Exception while sending Meta message to {To}", to);
+            _logger.LogError(ex, "Exception sending Meta message to {To}", to);
             return false;
         }
     }
