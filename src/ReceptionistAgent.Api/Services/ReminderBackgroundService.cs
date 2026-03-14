@@ -63,7 +63,15 @@ public class ReminderBackgroundService : BackgroundService
             {
                 var messageSender = await senderFactory.CreateSenderAsync(reminder.TenantId);
                 var message = reminder.MessageContent ?? "Recordatorio: Tiene una cita próximamente.";
-                var success = await messageSender.SendAsync(reminder.RecipientPhone, message);
+
+                // El número en DB ya está normalizado (ej: "573245058320").
+                // Añadimos whatsapp:+ para que ambos senders lo procesen correctamente.
+                // MetaWhatsAppSender quita el prefijo; TwilioMessageSender lo necesita.
+                var formattedPhone = reminder.RecipientPhone.StartsWith("whatsapp:")
+                    ? reminder.RecipientPhone
+                    : $"whatsapp:+{reminder.RecipientPhone}";
+
+                var success = await messageSender.SendAsync(formattedPhone, message);
 
                 if (success)
                 {

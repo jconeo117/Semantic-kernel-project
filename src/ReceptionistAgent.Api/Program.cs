@@ -41,7 +41,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = builder.Configuration["Jwt:Audience"] ?? "ReceptionistAI_ClientDashboard",
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(secretKey))
         };
-        
+
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>
@@ -209,7 +209,7 @@ builder.Services.AddScoped<IBookingService, BookingService>();
 
 // --- Semantic Kernel & AI (Strategy Pattern) ---
 builder.Services.AddSingleton<IAIProviderConfigurator, GoogleAIConfigurator>();
-builder.Services.AddSingleton<IAIProviderConfigurator, GroqAIConfigurator>();
+//builder.Services.AddSingleton<IAIProviderConfigurator, GroqAIConfigurator>();
 builder.Services.AddSingleton<KernelFactory>();
 
 builder.Services.AddScoped<IChatOrchestrator, ChatOrchestrator>();
