@@ -127,6 +127,59 @@ public class DatabaseExplorerController : ControllerBase
             return StatusCode(500, new { error = $"Error al consultar bookings: {ex.Message}" });
         }
     }
+
+    /// <summary>
+    /// Obtiene un resumen del estado de las tablas principales en la DB del tenant.
+    /// </summary>
+    [HttpGet("health")]
+    public async Task<IActionResult> GetHealth(string tenantId)
+    {
+        var tenant = await _tenantResolver.ResolveAsync(tenantId);
+        if (tenant == null)
+            return NotFound(new { error = $"Tenant '{tenantId}' no encontrado." });
+
+        if (!tenant.DbType.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { error = "Solo se puede consultar la salud de la base de datos de tenants con DbType 'SqlServer'." });
+
+        if (string.IsNullOrWhiteSpace(tenant.ConnectionString))
+            return BadRequest(new { error = "El tenant no tiene una ConnectionString configurada." });
+
+        try
+        {
+            using var connection = new SqlConnection(tenant.ConnectionString);
+            await connection.OpenAsync();
+
+            var tablesToCheck = new[] { "Providers", "ChatSessions", "Reminders", "Bookings" };
+            var health = new Dictionary<string, object>();
+
+            foreach (var table in tablesToCheck)
+            {
+                var sql = @$"
+                    IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = '{table}')
+                        SELECT COUNT(*) FROM [{table}]
+                    ELSE
+                        SELECT -1";
+                
+                var count = await connection.ExecuteScalarAsync<int>(sql);
+                health[table] = new
+                {
+                    Exists = count >= 0,
+                    RowCount = count >= 0 ? count : 0
+                };
+            }
+
+            return Ok(new
+            {
+                tenantId,
+                timestamp = DateTime.UtcNow,
+                health
+            });
+        }
+        catch (SqlException ex)
+        {
+            return StatusCode(500, new { error = $"Error al consultar salud de la DB: {ex.Message}" });
+        }
+    }
 }
 
 public record TableInfo(string TableName, string TableType);

@@ -19,11 +19,16 @@ public class TenantAdminController : ControllerBase
 {
     private readonly ITenantResolver _tenantResolver;
     private readonly IBillingService _billingService;
+    private readonly Connectors.Services.TenantDbInitializer _dbInitializer;
 
-    public TenantAdminController(ITenantResolver tenantResolver, IBillingService billingService)
+    public TenantAdminController(
+        ITenantResolver tenantResolver, 
+        IBillingService billingService,
+        Connectors.Services.TenantDbInitializer dbInitializer)
     {
         _tenantResolver = tenantResolver;
         _billingService = billingService;
+        _dbInitializer = dbInitializer;
     }
 
     // ═══ Tenant CRUD ═══
@@ -68,6 +73,25 @@ public class TenantAdminController : ControllerBase
             BillingStatus = BillingStatus.Active,
             ActiveUntil = DateTime.UtcNow.AddDays(30)
         });
+
+        // Fase 2.4: Inicializar DB si es SqlServer
+        string? initWarning = null;
+        if (tenant.DbType == "SqlServer" && !string.IsNullOrWhiteSpace(tenant.ConnectionString))
+        {
+            try
+            {
+                await _dbInitializer.InitializeAsync(tenant.ConnectionString);
+            }
+            catch (Exception ex)
+            {
+                initWarning = $"Tenant creado pero falló la inicialización de la DB: {ex.Message}";
+            }
+        }
+
+        if (initWarning != null)
+        {
+            return CreatedAtAction(nameof(GetById), new { tenantId = created.TenantId }, new { tenant = created, warning = initWarning });
+        }
 
         return CreatedAtAction(nameof(GetById), new { tenantId = created.TenantId }, created);
     }
@@ -128,6 +152,27 @@ public class TenantAdminController : ControllerBase
         var activeUntil = request.ActiveUntil ?? DateTime.UtcNow.AddDays(30);
         await _billingService.ReactivateTenantAsync(tenantId, activeUntil);
         return Ok(new { message = $"Tenant '{tenantId}' reactivado hasta {activeUntil:yyyy-MM-dd}." });
+    }
+
+    [HttpPost("{tenantId}/reinitialize")]
+    public async Task<IActionResult> ReinitializeDb(string tenantId)
+    {
+        var tenant = await _tenantResolver.ResolveAsync(tenantId);
+        if (tenant == null)
+            return NotFound(new { error = $"Tenant '{tenantId}' no encontrado." });
+
+        if (tenant.DbType != "SqlServer" || string.IsNullOrWhiteSpace(tenant.ConnectionString))
+            return BadRequest(new { error = "Solo se puede inicializar la base de datos de tenants con DbType 'SqlServer' y ConnectionString configurada." });
+
+        try
+        {
+            await _dbInitializer.InitializeAsync(tenant.ConnectionString);
+            return Ok(new { message = "Base de datos inicializada correctamente." });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { error = $"Error al inicializar la base de datos: {ex.Message}" });
+        }
     }
 }
 

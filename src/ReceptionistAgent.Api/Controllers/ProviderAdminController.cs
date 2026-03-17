@@ -24,78 +24,32 @@ public class ProviderAdminController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(string tenantId)
+    public IActionResult GetAll(string tenantId)
     {
-        var tenant = await _tenantResolver.ResolveAsync(tenantId);
-        if (tenant == null)
-            return NotFound(new { error = $"Tenant '{tenantId}' no encontrado." });
-
-        return Ok(new { tenantId, total = tenant.Providers.Count, providers = tenant.Providers });
+        return StatusCode(StatusCodes.Status410Gone, new { error = "This endpoint is deprecated. Providers are now managed directly in the client database for SQL tenants." });
     }
 
     [HttpGet("{providerId}")]
-    public async Task<IActionResult> GetById(string tenantId, string providerId)
+    public IActionResult GetById(string tenantId, string providerId)
     {
-        var tenant = await _tenantResolver.ResolveAsync(tenantId);
-        if (tenant == null)
-            return NotFound(new { error = $"Tenant '{tenantId}' no encontrado." });
-
-        var provider = tenant.Providers.FirstOrDefault(p => p.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase));
-        if (provider == null)
-            return NotFound(new { error = $"Provider '{providerId}' no encontrado en tenant '{tenantId}'." });
-
-        return Ok(provider);
+        return StatusCode(StatusCodes.Status410Gone, new { error = "This endpoint is deprecated. Providers are now managed directly in the client database for SQL tenants." });
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create(string tenantId, [FromBody] TenantProviderConfig provider)
+    public IActionResult Create(string tenantId, [FromBody] TenantProviderConfig provider)
     {
-        var tenant = await _tenantResolver.ResolveAsync(tenantId);
-        if (tenant == null)
-            return NotFound(new { error = $"Tenant '{tenantId}' no encontrado." });
-
-        if (string.IsNullOrWhiteSpace(provider.Id) || string.IsNullOrWhiteSpace(provider.Name))
-            return BadRequest(new { error = "Id y Name del provider son requeridos." });
-
-        if (tenant.Providers.Any(p => p.Id.Equals(provider.Id, StringComparison.OrdinalIgnoreCase)))
-            return Conflict(new { error = $"Provider '{provider.Id}' ya existe en tenant '{tenantId}'." });
-
-        tenant.Providers.Add(provider);
-        await _tenantResolver.UpdateAsync(tenant);
-
-        return CreatedAtAction(nameof(GetById), new { tenantId, providerId = provider.Id }, provider);
+        return StatusCode(StatusCodes.Status410Gone, new { error = "This endpoint is deprecated. Providers are now managed directly in the client database for SQL tenants." });
     }
 
     [HttpPut("{providerId}")]
-    public async Task<IActionResult> Update(string tenantId, string providerId, [FromBody] TenantProviderConfig provider)
+    public IActionResult Update(string tenantId, string providerId, [FromBody] TenantProviderConfig provider)
     {
-        var tenant = await _tenantResolver.ResolveAsync(tenantId);
-        if (tenant == null)
-            return NotFound(new { error = $"Tenant '{tenantId}' no encontrado." });
-
-        var existingIndex = tenant.Providers.FindIndex(p => p.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase));
-        if (existingIndex < 0)
-            return NotFound(new { error = $"Provider '{providerId}' no encontrado." });
-
-        provider.Id = providerId;
-        tenant.Providers[existingIndex] = provider;
-        await _tenantResolver.UpdateAsync(tenant);
-
-        return Ok(provider);
+        return StatusCode(StatusCodes.Status410Gone, new { error = "This endpoint is deprecated. Providers are now managed directly in the client database for SQL tenants." });
     }
 
     [HttpDelete("{providerId}")]
-    public async Task<IActionResult> Delete(string tenantId, string providerId)
+    public IActionResult Delete(string tenantId, string providerId)
     {
-        var tenant = await _tenantResolver.ResolveAsync(tenantId);
-        if (tenant == null)
-            return NotFound(new { error = $"Tenant '{tenantId}' no encontrado." });
-
-        var removed = tenant.Providers.RemoveAll(p => p.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase));
-        if (removed == 0)
-            return NotFound(new { error = $"Provider '{providerId}' no encontrado." });
-
-        await _tenantResolver.UpdateAsync(tenant);
-        return Ok(new { message = $"Provider '{providerId}' eliminado de tenant '{tenantId}'." });
+        return StatusCode(StatusCodes.Status410Gone, new { error = "This endpoint is deprecated. Providers are now managed directly in the client database for SQL tenants." });
     }
 }

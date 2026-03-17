@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.SemanticKernel.ChatCompletion;
 using ReceptionistAgent.Connectors.Repositories;
 using ReceptionistAgent.Core.Services;
+using ReceptionistAgent.Core.Tenant;
+using ReceptionistAgent.Connectors.Adapters;
 using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
 
@@ -15,15 +17,21 @@ public class DashboardController : ControllerBase
 {
     private readonly IChatSessionRepository _sessionRepository;
     private readonly IMessageSenderFactory _messageSenderFactory;
+    private readonly ITenantResolver _tenantResolver;
+    private readonly ClientDataAdapterFactory _adapterFactory;
     private readonly Microsoft.AspNetCore.SignalR.IHubContext<ReceptionistAgent.Api.Hubs.DashboardHub> _hubContext;
 
     public DashboardController(
         IChatSessionRepository sessionRepository,
         IMessageSenderFactory messageSenderFactory,
+        ITenantResolver tenantResolver,
+        ClientDataAdapterFactory adapterFactory,
         Microsoft.AspNetCore.SignalR.IHubContext<ReceptionistAgent.Api.Hubs.DashboardHub> hubContext)
     {
         _sessionRepository = sessionRepository;
         _messageSenderFactory = messageSenderFactory;
+        _tenantResolver = tenantResolver;
+        _adapterFactory = adapterFactory;
         _hubContext = hubContext;
     }
 
@@ -48,6 +56,58 @@ public class DashboardController : ControllerBase
         var formattedHistory = history.Select(m => new { Role = m.Role.ToString(), Content = m.Content });
 
         return Ok(formattedHistory);
+    }
+
+    [HttpGet("stats")]
+    public async Task<IActionResult> GetStats()
+    {
+        var tenantId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(tenantId)) return Unauthorized();
+
+        var tenant = await _tenantResolver.ResolveAsync(tenantId);
+        if (tenant == null) return NotFound();
+
+        var adapter = _adapterFactory.CreateAdapter(tenant);
+        var bookings = await adapter.GetAllBookingsAsync();
+        var providers = await adapter.GetAllProvidersAsync();
+        var activeSessions = await _sessionRepository.GetActiveSessionsAsync(tenantId);
+
+        return Ok(new
+        {
+            TotalBookings = bookings.Count,
+            PendingBookings = bookings.Count(b => b.Status == Core.Models.BookingStatus.Scheduled),
+            ProviderCount = providers.Count,
+            ActiveSessions = activeSessions.Count,
+            NeedsAttention = activeSessions.Count(s => s.NeedsHumanAttention)
+        });
+    }
+
+    [HttpGet("bookings")]
+    public async Task<IActionResult> GetBookings()
+    {
+        var tenantId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(tenantId)) return Unauthorized();
+
+        var tenant = await _tenantResolver.ResolveAsync(tenantId);
+        if (tenant == null) return NotFound();
+
+        var adapter = _adapterFactory.CreateAdapter(tenant);
+        var bookings = await adapter.GetAllBookingsAsync();
+        return Ok(bookings.OrderByDescending(b => b.ScheduledDate).ThenByDescending(b => b.ScheduledTime));
+    }
+
+    [HttpGet("providers")]
+    public async Task<IActionResult> GetProviders()
+    {
+        var tenantId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(tenantId)) return Unauthorized();
+
+        var tenant = await _tenantResolver.ResolveAsync(tenantId);
+        if (tenant == null) return NotFound();
+
+        var adapter = _adapterFactory.CreateAdapter(tenant);
+        var providers = await adapter.GetAllProvidersAsync();
+        return Ok(providers);
     }
 
     [HttpPost("sessions/{sessionId}/reply")]

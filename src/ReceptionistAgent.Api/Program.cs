@@ -159,8 +159,21 @@ builder.Services.AddSingleton<ClientDataAdapterFactory>();
 builder.Services.AddSingleton<IPromptBuilder, PromptBuilder>();
 //
 //var coreConnStr = builder.Configuration.GetConnectionString("AgentCore")!;
-builder.Services.AddSingleton<IChatSessionRepository>(
-    _ => new SqlChatSessionRepository(coreConnStr));
+builder.Services.AddScoped<IChatSessionRepository>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var coreConnStr = configuration.GetConnectionString("AgentCore")!;
+    var tenantContext = sp.GetRequiredService<TenantContext>();
+    var tenant = tenantContext.CurrentTenant;
+    var tenantConnStr = tenant?.ConnectionString;
+
+    if (tenant != null && tenant.DbType.Equals("PostgreSql", StringComparison.OrdinalIgnoreCase))
+    {
+        return new PostgreSqlChatSessionRepository(coreConnStr, tenantConnStr);
+    }
+
+    return new SqlChatSessionRepository(coreConnStr, tenantConnStr);
+});
 
 // --- Security & Audit Services ---
 builder.Services.AddSingleton<IInputGuard, PromptInjectionGuard>();
@@ -172,8 +185,24 @@ builder.Services.AddSingleton<IAuditLogger>(
 // --- Billing, Reminders & Metrics ---
 builder.Services.AddSingleton<IBillingService>(
     _ => new SqlBillingService(coreConnStr));
-builder.Services.AddSingleton<IReminderService>(
-    _ => new SqlReminderService(coreConnStr));
+builder.Services.AddSingleton<IBookingBackupService>(
+    _ => new SqlBookingBackupService(coreConnStr));
+
+builder.Services.AddScoped<IReminderService>(sp =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var coreConnStr = configuration.GetConnectionString("AgentCore")!;
+    var tenantContext = sp.GetRequiredService<TenantContext>();
+    var tenant = tenantContext.CurrentTenant;
+    var tenantConnStr = tenant?.ConnectionString;
+
+    if (tenant != null && tenant.DbType.Equals("PostgreSql", StringComparison.OrdinalIgnoreCase))
+    {
+        return new PostgreSqlReminderService(coreConnStr, tenantConnStr);
+    }
+
+    return new SqlReminderService(coreConnStr, tenantConnStr);
+});
 builder.Services.AddSingleton<SqlMetricsRepository>(
     _ => new SqlMetricsRepository(coreConnStr));
 
@@ -187,6 +216,7 @@ builder.Services.AddSingleton<IMessageSenderFactory, MessageSenderFactory>();
 builder.Services.AddHostedService<ReminderBackgroundService>();
 
 builder.Services.AddTransient<ApiKeyAuthFilter>();
+builder.Services.AddTransient<TenantDbInitializer>();
 
 // Scoped: resuelto por request via middleware
 builder.Services.AddScoped<TenantContext>();

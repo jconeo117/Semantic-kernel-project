@@ -232,7 +232,8 @@ public class BookingPlugin
                     try
                     {
                         var countryCode = _tenantContext.CurrentTenant?.PhoneCountryCode ?? "";
-                        await _reminderService.ScheduleRemindersForBookingAsync(booking, clientPhone, countryCode);
+                        var timeZoneId = _tenantContext.CurrentTenant?.TimeZoneId ?? "UTC";
+                        await _reminderService.ScheduleRemindersForBookingAsync(booking, clientPhone, countryCode, timeZoneId);
                         _logger.LogInformation("Reminders scheduled for booking {Code}", booking.ConfirmationCode);
                     }
                     catch (Exception ex)
