@@ -10,7 +10,7 @@ const emptyProvider = () => ({
   startTime: "09:00", endTime: "18:00", slotDurationMinutes: 30,
 });
 
-const STEPS = ["Básicos", "Base de Datos", "Servicios", "Providers"];
+const STEPS = ["Básicos", "Base de Datos", "Servicios"];
 
 export default function CreateTenantModal({ onClose, onCreate }) {
   const { colors: C, styles: s } = useTheme();
@@ -21,19 +21,15 @@ export default function CreateTenantModal({ onClose, onCreate }) {
   const [form, setForm] = useState({
     tenantId: "", businessName: "", businessType: "clinic",
     username: "", passwordHash: "",
-    timeZoneId: "America/Bogota", address: "", phone: "", workingHours: "",
+    timeZoneId: "America/Bogota", address: "", phone: "", phoneCountryCode: "", workingHours: "",
     dbType: "InMemory", connectionString: "",
     services: [""],
-    providers: [emptyProvider()],
   });
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
   const addService = () => set("services", [...form.services, ""]);
   const removeService = (i) => set("services", form.services.filter((_, idx) => idx !== i));
   const updateService = (i, val) => { const copy = [...form.services]; copy[i] = val; set("services", copy); };
-  const addProvider = () => set("providers", [...form.providers, emptyProvider()]);
-  const removeProvider = (i) => set("providers", form.providers.filter((_, idx) => idx !== i));
-  const updateProvider = (i, key, val) => { const copy = [...form.providers]; copy[i] = { ...copy[i], [key]: val }; set("providers", copy); };
 
   const canNext = () => {
     if (step === 0) return form.tenantId.trim() && form.businessName.trim();
@@ -54,15 +50,12 @@ export default function CreateTenantModal({ onClose, onCreate }) {
         timeZoneId: form.timeZoneId,
         address: form.address.trim(),
         phone: form.phone.trim(),
+        phoneCountryCode: form.phoneCountryCode.trim(),
         workingHours: form.workingHours.trim(),
         dbType: form.dbType,
         connectionString: form.dbType === "SqlServer" ? form.connectionString.trim() : "",
         services: form.services.filter(sv => sv.trim()),
-        providers: form.providers.filter(p => p.id.trim() && p.name.trim()).map(p => ({
-          id: p.id.trim(), name: p.name.trim(), role: p.role.trim(),
-          workingDays: p.workingDays, startTime: p.startTime, endTime: p.endTime,
-          slotDurationMinutes: parseInt(p.slotDurationMinutes) || 30,
-        })),
+        providers: [],
       };
       await onCreate(payload);
       onClose();
@@ -126,9 +119,15 @@ export default function CreateTenantModal({ onClose, onCreate }) {
             <label style={labelStyle}>Dirección</label>
             <input style={inputStyle} placeholder="ej: Calle 30 #25-10, Montería" value={form.address} onChange={e => set("address", e.target.value)} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div>
-                <label style={labelStyle}>Teléfono</label>
-                <input style={inputStyle} placeholder="ej: 314-111-0001" value={form.phone} onChange={e => set("phone", e.target.value)} />
+              <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: 8 }}>
+                <div>
+                  <label style={labelStyle}>Prefijo</label>
+                  <input style={inputStyle} placeholder="57" value={form.phoneCountryCode} onChange={e => set("phoneCountryCode", e.target.value)} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Teléfono</label>
+                  <input style={inputStyle} placeholder="314-111-0001" value={form.phone} onChange={e => set("phone", e.target.value)} />
+                </div>
               </div>
               <div>
                 <label style={labelStyle}>Horario de Trabajo</label>
@@ -176,30 +175,6 @@ export default function CreateTenantModal({ onClose, onCreate }) {
           </div>
         )}
 
-        {step === 3 && (
-          <div className="fade-in">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <label style={{ ...labelStyle, marginBottom: 0 }}>Providers ({form.providers.length})</label>
-              <button style={s.btn()} onClick={addProvider}>+ Agregar</button>
-            </div>
-            {form.providers.map((p, i) => (
-              <div key={i} style={{ background: C.surfaceHover, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <span style={{ fontSize: 11, color: C.textMuted, fontWeight: 600 }}>Provider {i + 1}</span>
-                  {form.providers.length > 1 && <button style={{ ...s.btn("danger"), padding: "4px 8px", fontSize: 9 }} onClick={() => removeProvider(i)}>Eliminar</button>}
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <div><label style={labelStyle}>ID *</label><input style={s.input} placeholder="ej: DR001" value={p.id} onChange={e => updateProvider(i, "id", e.target.value)} /></div>
-                  <div><label style={labelStyle}>Nombre *</label><input style={s.input} placeholder="ej: Dr. Andrés" value={p.name} onChange={e => updateProvider(i, "name", e.target.value)} /></div>
-                  <div><label style={labelStyle}>Rol</label><input style={s.input} placeholder="ej: Medicina General" value={p.role} onChange={e => updateProvider(i, "role", e.target.value)} /></div>
-                  <div><label style={labelStyle}>Duración Slot (min)</label><input style={s.input} type="number" min="5" max="120" value={p.slotDurationMinutes} onChange={e => updateProvider(i, "slotDurationMinutes", e.target.value)} /></div>
-                  <div><label style={labelStyle}>Hora Inicio</label><input style={s.input} type="time" value={p.startTime} onChange={e => updateProvider(i, "startTime", e.target.value)} /></div>
-                  <div><label style={labelStyle}>Hora Fin</label><input style={s.input} type="time" value={p.endTime} onChange={e => updateProvider(i, "endTime", e.target.value)} /></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
 
         {error && (
           <div style={{ padding: "10px 14px", borderRadius: 6, background: C.redDim, border: "1px solid rgba(255,68,68,0.2)", color: C.red, fontSize: 11, marginTop: 12 }}>

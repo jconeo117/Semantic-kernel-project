@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
-import { format, formatDistanceToNow } from 'date-fns';
-import { es } from 'date-fns/locale';
-import { LogOut, AlertCircle, CheckCircle2, Search, Send, User, MessageSquare, Clock, ShieldAlert, Bot } from 'lucide-react';
+import { format } from 'date-fns';
+import { Search, MessageSquare, Plus, Send, User } from 'lucide-react';
 import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
+import DashboardLayout from '../components/DashboardLayout';
+import Topbar from '../components/Topbar';
 
 const Inbox = () => {
-  const { logout, tenant, token } = useAuth();
+  const { tenant, token } = useAuth();
   const [sessions, setSessions] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
   const [history, setHistory] = useState([]);
@@ -18,16 +19,12 @@ const Inbox = () => {
   const activeSessionRef = useRef(activeSession);
   const connectionRef = useRef(null);
 
-  // Keep ref up to date to access inside SignalR callbacks without stale closures
   useEffect(() => {
     activeSessionRef.current = activeSession;
   }, [activeSession]);
 
   useEffect(() => {
-    // Initial data fetch
     fetchSessions();
-    
-    // 1. Establish SignalR WebSockets Connection
     const connection = new HubConnectionBuilder()
         .withUrl("http://localhost:5083/hubs/dashboard", {
             accessTokenFactory: () => token
@@ -37,28 +34,22 @@ const Inbox = () => {
         .build();
 
     connectionRef.current = connection;
-
-    // 2. Define exactly what happens when the DashboardHub pushes an event
     connection.on("ReceiveSessionUpdate", () => {
-        console.log("⚡ SignalR WebSockets: Notification received! Updating Inbox UI.");
         fetchSessions();
         if (activeSessionRef.current) {
             fetchHistory(activeSessionRef.current.id);
         }
     });
 
-    // 3. Start Connection
     connection.start()
         .then(() => console.log('🟢 SignalR WebSockets Connected'))
         .catch(err => console.error('🔴 SignalR Connection Error: ', err));
 
-    // Cleanup on unmount
     return () => {
-      connection.stop();
+      if (connectionRef.current) connectionRef.current.stop();
     };
-  }, []); // Run ONCE on component mount
+  }, []);
 
-  // Fetch history specifically when the active session changes manually by the user click
   useEffect(() => {
     if (activeSession) {
       fetchHistory(activeSession.id);
@@ -67,7 +58,6 @@ const Inbox = () => {
     }
   }, [activeSession]);
 
-  // Scroll to bottom of chat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [history]);
@@ -75,7 +65,6 @@ const Inbox = () => {
   const fetchSessions = async () => {
     try {
       const res = await axios.get('/api/dashboard/sessions');
-      // Sort by NeedsHumanAttention first, then by updated date
       const sorted = res.data.sort((a, b) => {
         if (a.needsHumanAttention === b.needsHumanAttention) {
           return new Date(b.updatedAt) - new Date(a.updatedAt);
@@ -83,8 +72,6 @@ const Inbox = () => {
         return a.needsHumanAttention ? -1 : 1;
       });
       setSessions(sorted);
-      
-      // Update active session ref if it exists in new data so NeedsHumanAttention updates visually
       if (activeSession) {
         const updatedActive = sorted.find(s => s.id === activeSession.id);
         if (updatedActive) setActiveSession(updatedActive);
@@ -104,7 +91,7 @@ const Inbox = () => {
   };
 
   const handleReply = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!replyMessage.trim() || !activeSession) return;
     
     setIsSending(true);
@@ -114,7 +101,7 @@ const Inbox = () => {
       });
       setReplyMessage("");
       await fetchHistory(activeSession.id);
-      await fetchSessions(); // Updates NeedsHumanAttention flag locally to false
+      await fetchSessions();
     } catch (err) {
       console.error('Failed to send reply', err);
       alert('Error al enviar el mensaje. Verifique la consola.');
@@ -131,246 +118,134 @@ const Inbox = () => {
   });
 
   return (
-    <div className="h-screen flex flex-col bg-slate-50 dark:bg-slate-950 font-sans mx-auto max-w-[1600px] shadow-2xl overflow-hidden">
-      
-      {/* Top Navbar */}
-      <header className="h-16 px-6 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between z-10">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-sm">
-            <MessageSquare className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-tight">Bandeja de Entrada</h1>
-            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-              {tenant?.name || 'Cargando organizacion...'}
-            </p>
-          </div>
-        </div>
-        
-        <button 
-          onClick={logout}
-          className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-red-500 transition-colors px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30"
-        >
-          <LogOut className="w-4 h-4" />
-          Cerrar Sesión
-        </button>
-      </header>
-
-      {/* Main Layout */}
+    <DashboardLayout>
+      <Topbar title="Inbox" />
       <div className="flex-1 flex overflow-hidden">
         
-        {/* Sidebar / Session List */}
-        <aside className="w-80 lg:w-96 flex flex-col bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800">
-          <div className="p-4 border-b border-slate-200 dark:border-slate-800">
+        {/* Thread List */}
+        <div className="w-[300px] shrink-0 border-r border-[var(--border)] overflow-y-auto bg-[var(--surface)] scrollbar-hide">
+          <div className="p-3.5 border-b border-[var(--border)] sticky top-0 bg-[var(--surface)] z-10">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
               <input 
-                type="text"
-                placeholder="Buscar por teléfono o ID..."
-                className="input-field pl-9 text-sm py-2"
+                className="w-full pl-8 pr-3 py-2 bg-[var(--bg)] border border-[var(--border)] rounded-lg text-[13px] outline-none focus:border-[var(--accent)] transition-all"
+                placeholder="Buscar conversaciones..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
               />
             </div>
           </div>
-          
-          <div className="flex-1 overflow-y-auto overflow-x-hidden">
-            {filteredSessions.length === 0 ? (
-              <div className="p-8 text-center text-sm text-slate-500 flex flex-col items-center">
-                <CheckCircle2 className="w-8 h-8 text-slate-300 dark:text-slate-600 mb-2" />
-                <p>No hay conversaciones activas.</p>
-              </div>
-            ) : (
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800/50">
-                {filteredSessions.map(session => {
-                  const isActive = activeSession?.id === session.id;
-                  
-                  return (
-                    <li key={session.id}>
-                      <button
-                        onClick={() => setActiveSession(session)}
-                        className={`w-full text-left p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex items-start gap-4 ${isActive ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}
-                      >
-                        <div className="relative">
-                          <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 shadow-sm border ${isActive ? 'bg-blue-100 border-blue-200 text-blue-600 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400' : 'bg-slate-100 border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'}`}>
-                            <User className="w-6 h-6" />
-                          </div>
-                          {session.needsHumanAttention && (
-                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white dark:border-slate-900 animate-pulse" />
-                          )}
-                        </div>
-                        
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-1">
-                            <h3 className="font-semibold text-sm text-slate-900 dark:text-slate-100 truncate">
-                              +{session.userPhone}
-                            </h3>
-                            <span className="text-xs text-slate-500 whitespace-nowrap ml-2">
-                              {formatDistanceToNow(new Date(session.updatedAt), { addSuffix: true, locale: es })}
-                            </span>
-                          </div>
-                          
-                          <div className="flex items-center justify-between">
-                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate pr-2">
-                              ID: {session.id.split('-')[0]}...
-                            </p>
-                            
-                            {session.needsHumanAttention && (
-                              <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400 text-[10px] font-bold uppercase tracking-wider">
-                                <ShieldAlert className="w-3 h-3" /> Requiere Atención
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </div>
-        </aside>
 
-        {/* Chat Area */}
-        <main className="flex-1 flex flex-col bg-slate-50 dark:bg-slate-950 relative">
-          
-          {!activeSession ? (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-sm z-10">
-              <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center mb-4 border border-blue-200 dark:border-blue-800/50">
-                <MessageSquare className="w-10 h-10 text-blue-500" />
-              </div>
-              <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-2">Ningún chat seleccionado</h2>
-              <p className="text-slate-500 dark:text-slate-400 px-4 text-center max-w-sm">
-                Seleccione una conversación del panel lateral para revisar el historial completo y enviar mensajes manuales.
-              </p>
-            </div>
-          ) : null}
-
-          {/* Active Chat Header */}
-          {activeSession && (
-            <div className="h-16 px-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-10 shrink-0">
-              <div className="flex items-center gap-3">
-                <h2 className="font-bold text-lg text-slate-800 dark:text-slate-100">
-                  Chat con +{activeSession.userPhone}
-                </h2>
-                {activeSession.needsHumanAttention && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400 text-xs font-bold uppercase tracking-wider animate-pulse">
-                    Escalado
-                  </span>
+          <div>
+            {filteredSessions.map(session => (
+              <div 
+                key={session.id}
+                onClick={() => setActiveSession(session)}
+                className={`p-3.5 border-b border-[var(--border)] cursor-pointer transition-colors flex gap-2.5 items-start ${activeSession?.id === session.id ? 'bg-[var(--accent-light)]' : 'hover:bg-[var(--bg)]'}`}
+              >
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[var(--accent)] to-[#7C3AED] flex items-center justify-center text-white text-[13px] font-bold shrink-0">
+                  {session.userPhone.slice(-2)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <div className="font-medium text-[13px] truncate">+{session.userPhone}</div>
+                    <div className="text-[11px] text-[var(--text-muted)]">
+                      {format(new Date(session.updatedAt), "HH:mm")}
+                    </div>
+                  </div>
+                  <div className="text-[12px] text-[var(--text-muted)] truncate">ID: {session.id.slice(0, 8)}</div>
+                </div>
+                {session.needsHumanAttention && (
+                  <div className="w-2 h-2 bg-[var(--accent)] rounded-full mt-1.5 shrink-0"></div>
                 )}
               </div>
-              <div className="flex items-center text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full font-mono">
-                <Clock className="w-3 h-3 mr-1.5" />
-                Actualizado: {format(new Date(activeSession.updatedAt), "HH:mm, dd MMM")}
-              </div>
-            </div>
-          )}
-
-          {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 md:space-y-6">
-            {history.map((msg, index) => {
-              // Handle possible camelCase or PascalCase from JSON serialization
-              const role = (msg.role || msg.Role || "").toLowerCase();
-              const content = (msg.content || msg.Content || "");
-
-              // Ignore system prompts to maintain a cleaner view
-              if (role === 'system') return null;
-
-              const isUser = role === 'user';
-              const isHumanAgent = role === 'assistant' && content.includes("[Agente Humano]");
-              
-              let bubbleColor = isUser
-                ? "bg-white border-slate-200 text-slate-800 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 rounded-br-none" 
-                : "bg-blue-600 border-blue-600 text-white rounded-bl-none shadow-md";
-              
-              if (isHumanAgent) {
-                 bubbleColor = "bg-indigo-600 border-indigo-600 text-white rounded-bl-none shadow-md ring-2 ring-indigo-400/20";
-              }
-
-              return (
-                <div key={index} className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}>
-                  {!isUser && (
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mr-3 mt-1 shadow-sm ${isHumanAgent ? 'bg-indigo-100 text-indigo-600' : 'bg-blue-100 text-blue-600'}`}>
-                      {isHumanAgent ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                    </div>
-                  )}
-                  
-                  <div className={`shadow-sm border px-4 py-3 sm:px-5 sm:py-3.5 rounded-2xl max-w-[85%] lg:max-w-[70%] text-[15px] leading-relaxed relative group ${bubbleColor}`}>
-                    
-                    {/* Role Badges */}
-                    {!isUser && (
-                      <div className="flex items-center gap-2 mb-1 opacity-80">
-                         <span className="text-[10px] font-bold uppercase tracking-wider text-white/90">
-                           {isHumanAgent ? "Agente Humano" : "Asistente Virtual"}
-                         </span>
-                      </div>
-                    )}
-
-                    <p className="whitespace-pre-wrap font-medium">
-                      {isHumanAgent ? content.replace("[Agente Humano]: ", "") : content}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-            <div ref={messagesEndRef} />
+            ))}
           </div>
+        </div>
 
-          {/* Input Area */}
-          {activeSession && (
-            <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shrink-0">
-              {activeSession.needsHumanAttention && (
-                <div className="mb-3 px-4 py-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-lg flex items-start gap-3">
-                  <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-                  <div className="text-sm text-amber-800 dark:text-amber-400">
-                    <p className="font-semibold">Esta conversacion requiere su atencion.</p>
-                    <p className="text-xs opacity-90">Escriba un mensaje a continuacion y presione Enviar para responder y limpiar esta alerta.</p>
+        {/* Chat Area */}
+        <div className="flex-1 flex flex-col overflow-hidden bg-[var(--bg)]">
+          {activeSession ? (
+            <>
+              <div className="p-3.5 px-5 border-b border-[var(--border)] bg-[var(--surface)] flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-[13px] font-bold">
+                    {activeSession.userPhone.slice(-2)}
+                  </div>
+                  <div>
+                    <div className="font-bold text-[14px]">+{activeSession.userPhone}</div>
+                    <div className="flex items-center gap-1.5 text-[var(--green)] text-[12px]">
+                      <span className="w-1.5 h-1.5 bg-[var(--green)] rounded-full"></span>
+                      En línea
+                    </div>
                   </div>
                 </div>
-              )}
-              
-              <form onSubmit={handleReply} className="flex items-end gap-3 max-w-4xl mx-auto">
-                <div className="relative flex-1">
-                  <textarea
-                    value={replyMessage}
-                    onChange={(e) => setReplyMessage(e.target.value)}
-                    placeholder="Escriba su respuesta (se enviará por WhatsApp)..."
-                    className="input-field min-h-[52px] max-h-[160px] py-3 resize-y block text-sm focus:ring-blue-500 rounded-xl"
-                    rows="1"
-                    onInput={(e) => {
-                      e.target.style.height = 'auto';
-                      e.target.style.height = (e.target.scrollHeight) + 'px';
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        if (replyMessage.trim()) handleReply(e);
-                      }
-                    }}
-                  />
+                <div className="flex gap-2">
+                  <button className="w-8 h-8 rounded-lg border border-[var(--border)] flex items-center justify-center text-[var(--text-secondary)] hover:bg-[var(--bg)] transition-colors">
+                    <MessageSquare size={14} />
+                  </button>
+                  <button className="w-8 h-8 rounded-lg border border-[var(--border)] flex items-center justify-center text-[var(--text-secondary)] hover:bg-[var(--bg)] transition-colors">
+                    <User size={14} />
+                  </button>
                 </div>
-                
-                <button
-                  type="submit"
-                  disabled={isSending || !replyMessage.trim()}
-                  className="btn-primary flex-shrink-0 h-13 px-6 rounded-xl flex items-center justify-center gap-2 group disabled:opacity-60 hover:shadow-md transition-all active:scale-95"
-                >
-                  {isSending ? (
-                    <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <span className="font-semibold">Enviar</span>
-                      <Send className="w-4 h-4 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
-                    </>
-                  )}
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 pb-2 flex flex-col gap-1.5">
+                {history.map((msg, i) => {
+                  const role = (msg.role || msg.Role || "").toLowerCase();
+                  if (role === 'system') return null;
+                  const isUser = role === 'user';
+                  
+                  return (
+                    <div key={i} className={`flex flex-col max-w-[68%] ${isUser ? 'self-start items-start' : 'self-end items-end'}`}>
+                      <div className={`px-3.5 py-2.5 rounded-[16px] text-[13.5px] leading-relaxed ${!isUser ? 'bg-[var(--accent)] text-white rounded-br-[4px]' : 'bg-[var(--surface)] text-[var(--text-primary)] rounded-bl-[4px] shadow-[0_1px_2px_rgba(0,0,0,0.06)]'}`}>
+                        {msg.content || msg.Content}
+                      </div>
+                      <div className="text-[10px] text-[var(--text-muted)] mt-1 px-0.5">
+                        {format(new Date(msg.timestamp || Date.now()), "HH:mm")}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={messagesEndRef} />
+              </div>
+
+              <div className="p-4 px-5 bg-[var(--surface)] border-t border-[var(--border)] flex items-center gap-2.5">
+                <button className="w-[38px] h-[38px] rounded-lg border border-[var(--border)] flex items-center justify-center text-[var(--text-secondary)] hover:bg-[var(--bg)] transition-colors">
+                  <Plus size={16} />
                 </button>
-              </form>
+                <textarea 
+                  className="flex-1 bg-[var(--bg)] border-[1.5px] border-[var(--border)] rounded-[22px] px-4 py-2.5 text-[13.5px] outline-none focus:border-[var(--accent)] transition-all resize-none max-h-[100px] overflow-y-auto"
+                  placeholder="Escribe un mensaje..."
+                  rows="1"
+                  value={replyMessage}
+                  onChange={e => setReplyMessage(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleReply();
+                    }
+                  }}
+                />
+                <button 
+                  onClick={() => handleReply()}
+                  disabled={isSending || !replyMessage.trim()}
+                  className="w-[38px] h-[38px] rounded-full bg-[var(--accent)] text-white flex items-center justify-center cursor-pointer transition-all hover:bg-[var(--accent-hover)] hover:scale-105 active:scale-100 disabled:opacity-50"
+                >
+                  <Send size={15} className="ml-0.5" />
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)] gap-2 border-l border-[var(--border)]">
+              <MessageSquare size={48} className="opacity-20 mb-2" />
+              <div className="font-display text-[15px] font-bold">Selecciona una conversación</div>
+              <div className="text-[13px]">Elige un chat de la lista para comenzar</div>
             </div>
           )}
-
-        </main>
+        </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 };
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LogIn, Building, AlertCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -18,7 +18,6 @@ const Login = () => {
 
     try {
       const result = await login(username, password);
-      // login via our provider sets the token in local storage and axios headers
       if (result.success) {
         navigate('/inbox');
       } else {
@@ -32,95 +31,60 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-950 p-4">
-      <div className="w-full max-w-md">
+    <div id="login-page" className="fixed inset-0 z-[100] bg-[var(--bg)] flex items-center justify-center animate-fadeIn font-body">
+      <div className="login-card bg-[var(--surface)] border border-[var(--border)] rounded-[20px] p-12 w-[420px] shadow-[var(--shadow-lg)] animate-slideUp">
+        <div className="font-display text-[22px] font-bold tracking-[-0.5px] text-[var(--text-primary)] mb-9 flex items-center gap-2.5">
+          <span className="w-2 h-2 bg-[var(--accent)] rounded-full inline-block"></span>
+          Dashboard
+        </div>
         
-        {/* Banner Logo */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-blue-600 rounded-xl shadow-lg flex items-center justify-center mb-4 transform hover:scale-105 transition-transform duration-300">
-            <Building className="w-8 h-8 text-white" />
+        <div className="font-display text-[26px] font-bold tracking-[-0.5px] mb-1.5">Bienvenido de nuevo</div>
+        <div className="text-[var(--text-secondary)] text-[14px] mb-8">Inicia sesión en tu espacio de trabajo</div>
+        
+        {error && (
+          <div className="bg-red-50 text-red-600 p-3 rounded-lg text-[13px] mb-6 flex items-center gap-2 border border-red-100">
+            <AlertCircle size={16} />
+            {error}
           </div>
-          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-500">
-            Client Dashboard
-          </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-2 text-center text-sm">
-            Gestione las conversaciones con sus clientes y atienda las alertas del Asistente Virtual.
-          </p>
-        </div>
+        )}
 
-        {/* Login Form */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl overflow-hidden border border-slate-200 dark:border-slate-800 transition-colors">
-          <div className="p-8">
-            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-              <LogIn className="w-5 h-5 text-blue-500" />
-              Inicie sesión
-            </h2>
-
-            {error && (
-              <div className="bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 p-4 rounded-xl text-sm mb-6 flex items-start gap-3 animate-pulse border border-red-200 dark:border-red-900/50">
-                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-                <p>{error}</p>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Usuario
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="ID del Tenant o Usuario"
-                  className="input-field"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Contraseña
-                </label>
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  className="input-field"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-
-              <div className="pt-4">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full btn-primary py-3 relative overflow-hidden group disabled:opacity-70"
-                >
-                  <span className={`flex items-center justify-center gap-2 transition-transform duration-300 ${loading ? 'scale-90 opacity-0' : 'scale-100 opacity-100'}`}>
-                    Ingresar
-                  </span>
-                  
-                  {loading && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-5 h-5 border-2 border-white/50 border-t-white rounded-full animate-spin" />
-                    </div>
-                  )}
-                  
-                  {/* Interaction ripple hint */}
-                  <div className="absolute inset-0 bg-white/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300 pointer-events-none" />
-                </button>
-              </div>
-            </form>
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-[12px] font-semibold text-[var(--text-secondary)] mb-1.5 uppercase tracking-[0.3px]">Usuario o Tenant ID</label>
+            <input
+              type="text"
+              required
+              className="input-field"
+              placeholder="nombre@empresa.com"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
           </div>
+          
+          <div className="mb-4">
+            <label className="block text-[12px] font-semibold text-[var(--text-secondary)] mb-1.5 uppercase tracking-[0.3px]">Contraseña</label>
+            <input
+              type="password"
+              required
+              className="input-field"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary"
+          >
+            {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
+          </button>
+        </form>
+        
+        <div className="text-center text-[var(--text-muted)] text-[12px] mt-5">
+          ¿Olvidaste tu contraseña? <span className="text-[var(--accent)] cursor-pointer">Recuperar</span>
         </div>
-
-        {/* Footer info */}
-        <p className="text-center text-xs text-slate-400 mt-8">
-          © {new Date().getFullYear()} Receptionist Agent AI. Todos los derechos reservados.
-        </p>
-
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useTheme, businessIcon, planColor, statusColor, fmt } from "../styles/tokens";
+import { useState, useEffect } from "react";
+import { useTheme, businessIcon, planColor, statusColor, fmt, api } from "../styles/tokens";
 import DatabaseExplorer from "./DatabaseExplorer";
 
 const TABS = [
@@ -12,6 +12,40 @@ export default function TenantModal({ data, onClose, onSuspend, onReactivate, on
   const { tenant, billing } = data;
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("info");
+  const [dbHealth, setDbHealth] = useState(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === "database" && tenant.dbType === "SqlServer") {
+      fetchHealth();
+    }
+  }, [activeTab, tenant.tenantId]);
+
+  const fetchHealth = async () => {
+    setHealthLoading(true);
+    try {
+      const resp = await api.get(`/admin/tenants/${tenant.tenantId}/database/health`);
+      setDbHealth(resp.data.health);
+    } catch (err) {
+      console.error("Error fetching DB health:", err);
+    } finally {
+      setHealthLoading(false);
+    }
+  };
+
+  const handleReinitialize = async () => {
+    if (!window.confirm("¿Estás seguro de re-inicializar la DB? Esto creará las tablas faltantes si no existen.")) return;
+    setLoading(true);
+    try {
+      await api.post(`/admin/tenants/${tenant.tenantId}/reinitialize`);
+      alert("DB Re-inicializada correctamente.");
+      fetchHealth();
+    } catch (err) {
+      alert("Error: " + (err.response?.data?.error || err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSuspend = async () => {
     setLoading(true);
@@ -100,11 +134,34 @@ export default function TenantModal({ data, onClose, onSuspend, onReactivate, on
               <div style={{ fontSize: 10, color: C.textDim, marginBottom: 3 }}>WEBHOOK</div>
               <div style={{ fontSize: 11, color: C.textMuted, fontFamily: "monospace" }}>/api/twilio/{tenant.tenantId}</div>
             </div>
+            {tenant.dbType === "SqlServer" && (
+              <div style={{ fontSize: 11, color: C.orange, background: C.orangeDim, padding: "8px 12px", borderRadius: 6, border: `1px solid ${C.orangeBorder}` }}>
+                ⓘ Este tenant usa SQL Server. Los proveedores se gestionan directamente en su base de datos.
+              </div>
+            )}
           </div>
         )}
 
         {activeTab === "database" && (
           <div className="fade-in" style={{ marginBottom: 20 }}>
+            {tenant.dbType === "SqlServer" && dbHealth && (
+              <div style={{ background: C.surfaceHover, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, marginBottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.textDim, textTransform: "uppercase" }}>Estado de Tablas (Cliente)</div>
+                  <button style={{ ...s.btn(), fontSize: 9, padding: "4px 8px" }} onClick={handleReinitialize} disabled={loading}>
+                     {loading ? "..." : "⚡ Re-inicializar DB"}
+                  </button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {Object.entries(dbHealth).map(([table, stat]) => (
+                    <div key={table} style={{ display: "flex", justifyContent: "space-between", padding: "6px 10px", background: C.bg, borderRadius: 6, border: `1px solid ${stat.Exists ? C.border : C.redBorder}` }}>
+                      <span style={{ fontSize: 11, color: stat.Exists ? C.text : C.red }}>{table}</span>
+                      <span style={{ fontSize: 10, color: C.textMuted }}>{stat.Exists ? `${stat.RowCount} filas` : "MISSING"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <DatabaseExplorer tenantId={tenant.tenantId} dbType={tenant.dbType} />
           </div>
         )}
