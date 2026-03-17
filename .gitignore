@@ -99,3 +99,6 @@ secrets.json
 node_modules/
 dist/
 api_log.txt 
+
+# Local scripts
+start.bat

@@ -1,17 +1,29 @@
+using Moq;
 using ReceptionistAgent.Connectors.Adapters;
 using ReceptionistAgent.Core.Adapters;
 using ReceptionistAgent.Core.Models;
+using ReceptionistAgent.Core.Services;
 using Xunit;
+using Microsoft.Extensions.Logging;
 
 namespace ReceptionistAgent.Tests.Adapters;
 
 public class ClientDataAdapterFactoryTests
 {
     private readonly ClientDataAdapterFactory _factory;
+    private readonly Mock<IBookingBackupService> _mockBackup;
+    private readonly Mock<ILoggerFactory> _mockLoggerFactory;
 
     public ClientDataAdapterFactoryTests()
     {
-        _factory = new ClientDataAdapterFactory();
+        _mockBackup = new Mock<IBookingBackupService>();
+        _mockLoggerFactory = new Mock<ILoggerFactory>();
+        
+        // Setup CreateLogger to return a mock or null logger
+        _mockLoggerFactory.Setup(f => f.CreateLogger(It.IsAny<string>()))
+            .Returns(new Mock<ILogger>().Object);
+
+        _factory = new ClientDataAdapterFactory(_mockBackup.Object, _mockLoggerFactory.Object);
     }
 
     [Fact]

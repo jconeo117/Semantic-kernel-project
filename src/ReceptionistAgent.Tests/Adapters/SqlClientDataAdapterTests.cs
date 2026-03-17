@@ -1,7 +1,10 @@
+using Moq;
 using ReceptionistAgent.Connectors.Adapters;
 using ReceptionistAgent.Core.Adapters;
 using ReceptionistAgent.Core.Models;
+using ReceptionistAgent.Core.Services;
 using Xunit;
+using Microsoft.Extensions.Logging;
 
 namespace ReceptionistAgent.Tests.Adapters;
 
@@ -13,11 +16,9 @@ public class SqlClientDataAdapterTests
     public async Task CreateBookingAsync_ShouldInsertRecord()
     {
         // Arrange
-        var providers = new List<ServiceProvider>
-        {
-            new() { Id = "DR001", Name = "Dr. Test" }
-        };
-        var adapter = new SqlClientDataAdapter(TestConnectionString, providers);
+        var mockBackup = new Mock<IBookingBackupService>();
+        var mockLogger = new Mock<ILogger<SqlClientDataAdapter>>();
+        var adapter = new SqlClientDataAdapter(TestConnectionString, mockBackup.Object, mockLogger.Object);
         var booking = new BookingRecord
         {
             TenantId = "TEST-TENANT",
