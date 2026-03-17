@@ -27,7 +27,13 @@ public class SqlTenantRepository : ITenantResolver
         var entity = await connection.QuerySingleOrDefaultAsync<TenantEntity>(tenantSql, new { TenantId = tenantId });
         if (entity == null) return null;
 
-        var providerEntities = (await connection.QueryAsync<ProviderEntity>(providersSql, new { TenantId = tenantId })).ToList();
+        var providerEntities = new List<ProviderEntity>();
+        // Skip provider loading for SQL Server tenants as they manage their own data
+        if (!string.Equals(entity.DbType, "SqlServer", StringComparison.OrdinalIgnoreCase))
+        {
+            providerEntities = (await connection.QueryAsync<ProviderEntity>(providersSql, new { TenantId = tenantId })).ToList();
+        }
+
         return MapToConfiguration(entity, providerEntities);
     }
 
@@ -47,7 +53,13 @@ public class SqlTenantRepository : ITenantResolver
         var entity = await connection.QuerySingleOrDefaultAsync<TenantEntity>(tenantSql, new { PhoneNumberId = phoneNumberId });
         if (entity == null) return null;
 
-        var providerEntities = (await connection.QueryAsync<ProviderEntity>(providersSql, new { TenantId = entity.TenantId })).ToList();
+        var providerEntities = new List<ProviderEntity>();
+        // Skip provider loading for SQL Server tenants as they manage their own data
+        if (!string.Equals(entity.DbType, "SqlServer", StringComparison.OrdinalIgnoreCase))
+        {
+            providerEntities = (await connection.QueryAsync<ProviderEntity>(providersSql, new { TenantId = entity.TenantId })).ToList();
+        }
+
         return MapToConfiguration(entity, providerEntities);
     }
 
@@ -69,7 +81,13 @@ public class SqlTenantRepository : ITenantResolver
         var entity = await connection.QuerySingleOrDefaultAsync<TenantEntity>(tenantSql, new { Username = username, PasswordHash = password });
         if (entity == null) return null;
 
-        var providerEntities = (await connection.QueryAsync<ProviderEntity>(providersSql, new { TenantId = entity.TenantId })).ToList();
+        var providerEntities = new List<ProviderEntity>();
+        // Skip provider loading for SQL Server tenants as they manage their own data
+        if (!string.Equals(entity.DbType, "SqlServer", StringComparison.OrdinalIgnoreCase))
+        {
+            providerEntities = (await connection.QueryAsync<ProviderEntity>(providersSql, new { TenantId = entity.TenantId })).ToList();
+        }
+
         return MapToConfiguration(entity, providerEntities);
     }
 
@@ -84,7 +102,8 @@ public class SqlTenantRepository : ITenantResolver
 
         return entities.Select(e =>
         {
-            var providers = allProviders.Where(p => p.TenantId == e.TenantId).ToList();
+            var isSql = string.Equals(e.DbType, "SqlServer", StringComparison.OrdinalIgnoreCase);
+            var providers = isSql ? new List<ProviderEntity>() : allProviders.Where(p => p.TenantId == e.TenantId).ToList();
             return MapToConfiguration(e, providers);
         }).ToList();
     }

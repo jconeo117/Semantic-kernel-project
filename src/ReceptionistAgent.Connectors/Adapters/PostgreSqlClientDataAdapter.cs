@@ -1,5 +1,5 @@
 using Dapper;
-using Microsoft.Data.SqlClient;
+using Npgsql;
 using ReceptionistAgent.Core.Models;
 using System.Text.Json;
 using ReceptionistAgent.Core.Adapters;
@@ -9,15 +9,15 @@ using Microsoft.Extensions.Logging;
 namespace ReceptionistAgent.Connectors.Adapters;
 
 /// <summary>
-/// Implementación de IClientDataAdapter usando Dapper para SQL Server.
+/// Implementación de IClientDataAdapter usando Dapper para PostgreSQL.
 /// </summary>
-public class SqlClientDataAdapter : IClientDataAdapter
+public class PostgreSqlClientDataAdapter : IClientDataAdapter
 {
     private readonly string _connectionString;
     private readonly IBookingBackupService _backupService;
-    private readonly ILogger<SqlClientDataAdapter> _logger;
+    private readonly ILogger<PostgreSqlClientDataAdapter> _logger;
 
-    public SqlClientDataAdapter(string connectionString, IBookingBackupService backupService, ILogger<SqlClientDataAdapter> logger)
+    public PostgreSqlClientDataAdapter(string connectionString, IBookingBackupService backupService, ILogger<PostgreSqlClientDataAdapter> logger)
     {
         _connectionString = connectionString;
         _backupService = backupService;
@@ -26,13 +26,13 @@ public class SqlClientDataAdapter : IClientDataAdapter
 
     public async Task<List<ServiceProvider>> GetAllProvidersAsync()
     {
-        const string sql = "SELECT * FROM Providers WHERE IsActive = 1";
+        const string sql = "SELECT * FROM providers WHERE is_active = true";
 
-        using var connection = new SqlConnection(_connectionString);
+        using var connection = new NpgsqlConnection(_connectionString);
         var entities = await connection.QueryAsync<ProviderEntity>(sql);
 
         var providers = entities.Select(MapToProvider).ToList();
-        _logger.LogInformation("Loaded {Count} providers from the tenant database.", providers.Count);
+        _logger.LogInformation("Loaded {Count} providers from the PostgreSQL tenant database.", providers.Count);
 
         return providers;
     }
@@ -42,8 +42,6 @@ public class SqlClientDataAdapter : IClientDataAdapter
         if (string.IsNullOrWhiteSpace(query))
             return new List<ServiceProvider>();
 
-        // For simplicity and to reuse the logic of RemoveAccents, 
-        // we fetch all and filter in memory as the number of providers is small (5-20).
         var providers = await GetAllProvidersAsync();
         var normalizedQuery = ReceptionistAgent.Core.Utils.TextHelper.RemoveAccents(query);
 
@@ -61,15 +59,15 @@ public class SqlClientDataAdapter : IClientDataAdapter
         booking.CreatedAt = DateTime.UtcNow;
 
         const string sql = @"
-            INSERT INTO Bookings (
-                Id, TenantId, ConfirmationCode, ClientName, ProviderId, ProviderName, 
-                ScheduledDate, ScheduledTime, Status, CreatedAt, CustomFieldsJson
+            INSERT INTO bookings (
+                id, tenant_id, confirmation_code, client_name, provider_id, provider_name, 
+                scheduled_date, scheduled_time, status, created_at, custom_fields_json
             ) VALUES (
                 @Id, @TenantId, @ConfirmationCode, @ClientName, @ProviderId, @ProviderName, 
-                @ScheduledDate, @ScheduledTime, @Status, @CreatedAt, @CustomFieldsJson
+                @ScheduledDate, @ScheduledTime, @Status, @CreatedAt, @CustomFieldsJson::jsonb
             )";
 
-        using var connection = new SqlConnection(_connectionString);
+        using var connection = new NpgsqlConnection(_connectionString);
         await connection.ExecuteAsync(sql, new
         {
             booking.Id,
@@ -85,7 +83,6 @@ public class SqlClientDataAdapter : IClientDataAdapter
             CustomFieldsJson = JsonSerializer.Serialize(booking.CustomFields)
         });
 
-        // Backup asíncrono
         await _backupService.BackupAsync(booking, booking.TenantId);
 
         return booking;
@@ -93,9 +90,9 @@ public class SqlClientDataAdapter : IClientDataAdapter
 
     public async Task<BookingRecord?> GetBookingByCodeAsync(string confirmationCode)
     {
-        const string sql = "SELECT * FROM Bookings WHERE ConfirmationCode = @Code";
+        const string sql = "SELECT * FROM bookings WHERE confirmation_code = @Code";
 
-        using var connection = new SqlConnection(_connectionString);
+        using var connection = new NpgsqlConnection(_connectionString);
         var entity = await connection.QuerySingleOrDefaultAsync<BookingEntity>(sql, new { Code = confirmationCode });
 
         return entity == null ? null : MapToRecord(entity);
@@ -103,9 +100,9 @@ public class SqlClientDataAdapter : IClientDataAdapter
 
     public async Task<List<BookingRecord>> GetBookingsByDateAsync(DateTime date)
     {
-        const string sql = "SELECT * FROM Bookings WHERE ScheduledDate = @Date AND Status != @CancelledStatus";
+        const string sql = "SELECT * FROM bookings WHERE scheduled_date = @Date AND status != @CancelledStatus";
 
-        using var connection = new SqlConnection(_connectionString);
+        using var connection = new NpgsqlConnection(_connectionString);
         var entities = await connection.QueryAsync<BookingEntity>(sql, new
         {
             Date = date.Date,
@@ -117,9 +114,9 @@ public class SqlClientDataAdapter : IClientDataAdapter
 
     public async Task<List<BookingRecord>> GetAllBookingsAsync()
     {
-        const string sql = "SELECT * FROM Bookings";
+        const string sql = "SELECT * FROM bookings";
 
-        using var connection = new SqlConnection(_connectionString);
+        using var connection = new NpgsqlConnection(_connectionString);
         var entities = await connection.QueryAsync<BookingEntity>(sql);
 
         return entities.Select(MapToRecord).ToList();
@@ -130,18 +127,18 @@ public class SqlClientDataAdapter : IClientDataAdapter
         booking.UpdatedAt = DateTime.UtcNow;
 
         const string sql = @"
-            UPDATE Bookings SET 
-                ClientName = @ClientName,
-                ProviderId = @ProviderId,
-                ProviderName = @ProviderName,
-                ScheduledDate = @ScheduledDate,
-                ScheduledTime = @ScheduledTime,
-                Status = @Status,
-                UpdatedAt = @UpdatedAt,
-                CustomFieldsJson = @CustomFieldsJson
-            WHERE Id = @Id";
+            UPDATE bookings SET 
+                client_name = @ClientName,
+                provider_id = @ProviderId,
+                provider_name = @ProviderName,
+                scheduled_date = @ScheduledDate,
+                scheduled_time = @ScheduledTime,
+                status = @Status,
+                updated_at = @UpdatedAt,
+                custom_fields_json = @CustomFieldsJson::jsonb
+            WHERE id = @Id";
 
-        using var connection = new SqlConnection(_connectionString);
+        using var connection = new NpgsqlConnection(_connectionString);
         var affected = await connection.ExecuteAsync(sql, new
         {
             booking.ClientName,
@@ -157,7 +154,6 @@ public class SqlClientDataAdapter : IClientDataAdapter
 
         if (affected > 0)
         {
-            // Backup asíncrono del nuevo estado
             await _backupService.UpdateStatusBackupAsync(booking.Id, booking.TenantId, booking.Status);
         }
 
@@ -168,9 +164,9 @@ public class SqlClientDataAdapter : IClientDataAdapter
     {
         if (!Guid.TryParse(id, out var bookingId)) return false;
 
-        const string sql = "DELETE FROM Bookings WHERE Id = @Id";
+        const string sql = "DELETE FROM bookings WHERE id = @Id";
 
-        using var connection = new SqlConnection(_connectionString);
+        using var connection = new NpgsqlConnection(_connectionString);
         var affected = await connection.ExecuteAsync(sql, new { Id = bookingId });
 
         return affected > 0;
@@ -179,13 +175,13 @@ public class SqlClientDataAdapter : IClientDataAdapter
     public async Task<bool> ExistsAsync(DateTime date, TimeSpan time, string providerId)
     {
         const string sql = @"
-            SELECT COUNT(1) FROM Bookings 
-            WHERE ProviderId = @ProviderId 
-              AND ScheduledDate = @Date 
-              AND ScheduledTime = @Time 
-              AND Status != @CancelledStatus";
+            SELECT COUNT(1) FROM bookings 
+            WHERE provider_id = @ProviderId 
+              AND scheduled_date = @Date 
+              AND scheduled_time = @Time 
+              AND status != @CancelledStatus";
 
-        using var connection = new SqlConnection(_connectionString);
+        using var connection = new NpgsqlConnection(_connectionString);
         var count = await connection.ExecuteScalarAsync<int>(sql, new
         {
             ProviderId = providerId,
@@ -199,9 +195,9 @@ public class SqlClientDataAdapter : IClientDataAdapter
 
     public async Task<BookingRecord?> GetBookingByClientIdAsync(string clientId)
     {
-        const string sql = "SELECT * FROM Bookings WHERE JSON_VALUE(CustomFieldsJson, '$.clientId') = @ClientId AND Status != @CancelledStatus ORDER BY ScheduledDate DESC";
+        const string sql = "SELECT * FROM bookings WHERE custom_fields_json ->> 'clientId' = @ClientId AND status != @CancelledStatus ORDER BY scheduled_date DESC LIMIT 1";
 
-        using var connection = new SqlConnection(_connectionString);
+        using var connection = new NpgsqlConnection(_connectionString);
         var entity = await connection.QueryFirstOrDefaultAsync<BookingEntity>(sql, new
         {
             ClientId = clientId,
@@ -213,9 +209,9 @@ public class SqlClientDataAdapter : IClientDataAdapter
 
     public async Task<List<BookingRecord>> GetBookingsByClientIdAsync(string clientId)
     {
-        const string sql = "SELECT * FROM Bookings WHERE JSON_VALUE(CustomFieldsJson, '$.clientId') = @ClientId ORDER BY ScheduledDate DESC";
+        const string sql = "SELECT * FROM bookings WHERE custom_fields_json ->> 'clientId' = @ClientId ORDER BY scheduled_date DESC";
 
-        using var connection = new SqlConnection(_connectionString);
+        using var connection = new NpgsqlConnection(_connectionString);
         var entities = await connection.QueryAsync<BookingEntity>(sql, new { ClientId = clientId });
 
         return entities.Select(MapToRecord).ToList();
@@ -225,20 +221,20 @@ public class SqlClientDataAdapter : IClientDataAdapter
     {
         return new BookingRecord
         {
-            Id = entity.Id,
-            TenantId = entity.TenantId,
-            ConfirmationCode = entity.ConfirmationCode,
-            ClientName = entity.ClientName,
-            ProviderId = entity.ProviderId,
-            ProviderName = entity.ProviderName,
-            ScheduledDate = entity.ScheduledDate,
-            ScheduledTime = entity.ScheduledTime,
-            Status = Enum.TryParse<BookingStatus>(entity.Status, true, out var status) ? status : BookingStatus.Scheduled,
-            CreatedAt = entity.CreatedAt,
-            UpdatedAt = entity.UpdatedAt,
-            CustomFields = string.IsNullOrWhiteSpace(entity.CustomFieldsJson)
+            Id = entity.id,
+            TenantId = entity.tenant_id,
+            ConfirmationCode = entity.confirmation_code,
+            ClientName = entity.client_name,
+            ProviderId = entity.provider_id,
+            ProviderName = entity.provider_name,
+            ScheduledDate = entity.scheduled_date,
+            ScheduledTime = entity.scheduled_time,
+            Status = Enum.TryParse<BookingStatus>(entity.status, true, out var status) ? status : BookingStatus.Scheduled,
+            CreatedAt = entity.created_at,
+            UpdatedAt = entity.updated_at,
+            CustomFields = string.IsNullOrWhiteSpace(entity.custom_fields_json)
                 ? new Dictionary<string, object>()
-                : JsonSerializer.Deserialize<Dictionary<string, object>>(entity.CustomFieldsJson) ?? new Dictionary<string, object>()
+                : JsonSerializer.Deserialize<Dictionary<string, object>>(entity.custom_fields_json) ?? new Dictionary<string, object>()
         };
     }
 
@@ -246,14 +242,14 @@ public class SqlClientDataAdapter : IClientDataAdapter
     {
         return new ServiceProvider
         {
-            Id = entity.Id,
-            Name = entity.Name,
-            Role = entity.Role,
-            WorkingDays = ParseWorkingDays(entity.WorkingDays),
-            StartTime = entity.StartTime,
-            EndTime = entity.EndTime,
-            SlotDurationMinutes = entity.SlotDurationMin,
-            IsAvailable = entity.IsActive
+            Id = entity.id,
+            Name = entity.name,
+            Role = entity.role,
+            WorkingDays = ParseWorkingDays(entity.working_days),
+            StartTime = entity.start_time,
+            EndTime = entity.end_time,
+            SlotDurationMinutes = entity.slot_duration_min,
+            IsAvailable = entity.is_active
         };
     }
 
@@ -268,7 +264,6 @@ public class SqlClientDataAdapter : IClientDataAdapter
         }
         catch
         {
-            // Fallback: try to deserialize as string list and parse manually
             try
             {
                 var strings = JsonSerializer.Deserialize<List<string>>(json);
@@ -282,32 +277,32 @@ public class SqlClientDataAdapter : IClientDataAdapter
             catch { return new List<DayOfWeek>(); }
         }
     }
-}
 
-public class BookingEntity
-{
-    public Guid Id { get; set; }
-    public string TenantId { get; set; } = string.Empty;
-    public string ConfirmationCode { get; set; } = string.Empty;
-    public string ClientName { get; set; } = string.Empty;
-    public string ProviderId { get; set; } = string.Empty;
-    public string ProviderName { get; set; } = string.Empty;
-    public DateTime ScheduledDate { get; set; }
-    public TimeSpan ScheduledTime { get; set; }
-    public string Status { get; set; } = string.Empty;
-    public DateTime CreatedAt { get; set; }
-    public DateTime? UpdatedAt { get; set; }
-    public string CustomFieldsJson { get; set; } = string.Empty;
-}
+    private class BookingEntity
+    {
+        public Guid id { get; set; }
+        public string tenant_id { get; set; } = string.Empty;
+        public string confirmation_code { get; set; } = string.Empty;
+        public string client_name { get; set; } = string.Empty;
+        public string provider_id { get; set; } = string.Empty;
+        public string provider_name { get; set; } = string.Empty;
+        public DateTime scheduled_date { get; set; }
+        public TimeSpan scheduled_time { get; set; }
+        public string status { get; set; } = string.Empty;
+        public DateTime created_at { get; set; }
+        public DateTime? updated_at { get; set; }
+        public string custom_fields_json { get; set; } = string.Empty;
+    }
 
-public class ProviderEntity
-{
-    public string Id { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
-    public string Role { get; set; } = string.Empty;
-    public string? WorkingDays { get; set; }
-    public TimeSpan StartTime { get; set; }
-    public TimeSpan EndTime { get; set; }
-    public int SlotDurationMin { get; set; }
-    public bool IsActive { get; set; }
+    private class ProviderEntity
+    {
+        public string id { get; set; } = string.Empty;
+        public string name { get; set; } = string.Empty;
+        public string role { get; set; } = string.Empty;
+        public string? working_days { get; set; }
+        public TimeSpan start_time { get; set; }
+        public TimeSpan end_time { get; set; }
+        public int slot_duration_min { get; set; }
+        public bool is_active { get; set; }
+    }
 }

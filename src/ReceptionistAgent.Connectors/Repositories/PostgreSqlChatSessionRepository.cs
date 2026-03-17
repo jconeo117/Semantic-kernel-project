@@ -1,18 +1,19 @@
 using Dapper;
+using Npgsql;
 using Microsoft.Data.SqlClient;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using System.Text.Json;
-using System.Collections.Concurrent;
+using ReceptionistAgent.Core.Session;
 
 namespace ReceptionistAgent.Connectors.Repositories;
 
-public class SqlChatSessionRepository : IChatSessionRepository
+public class PostgreSqlChatSessionRepository : IChatSessionRepository
 {
     private readonly string _agentCoreConnectionString;
     private readonly string? _tenantConnectionString;
 
-    public SqlChatSessionRepository(string agentCoreConnectionString, string? tenantConnectionString = null)
+    public PostgreSqlChatSessionRepository(string agentCoreConnectionString, string? tenantConnectionString = null)
     {
         _agentCoreConnectionString = agentCoreConnectionString;
         _tenantConnectionString = tenantConnectionString;
@@ -20,13 +21,13 @@ public class SqlChatSessionRepository : IChatSessionRepository
 
     public async Task<ChatHistory> GetChatHistoryAsync(Guid sessionId, string tenantId, string systemPrompt, string? userPhone = null)
     {
-        // Primary: Tenant DB
+        // Primary: Tenant DB (PostgreSQL)
         if (!string.IsNullOrEmpty(_tenantConnectionString))
         {
             try
             {
-                const string sql = "SELECT HistoryJson FROM ChatSessions WHERE Id = @Id";
-                using var connection = new SqlConnection(_tenantConnectionString);
+                const string sql = "SELECT history_json FROM chat_sessions WHERE id = @Id";
+                using var connection = new NpgsqlConnection(_tenantConnectionString);
                 var json = await connection.QuerySingleOrDefaultAsync<string>(sql, new { Id = sessionId });
 
                 if (!string.IsNullOrWhiteSpace(json))
@@ -40,7 +41,7 @@ public class SqlChatSessionRepository : IChatSessionRepository
             }
         }
 
-        // Fallback/Legacy: AgentCore
+        // Fallback: AgentCore (SQL Server)
         const string coreSql = "SELECT HistoryJson FROM ChatSessions WHERE Id = @Id AND TenantId = @TenantId";
         using (var connection = new SqlConnection(_agentCoreConnectionString))
         {
@@ -94,12 +95,12 @@ public class SqlChatSessionRepository : IChatSessionRepository
             .ToList();
         var json = JsonSerializer.Serialize(persistableMessages);
 
-        // 1. Primary Write (Tenant DB)
+        // 1. Primary Write (Tenant DB - PostgreSQL)
         bool updatedInTenant = false;
         if (!string.IsNullOrEmpty(_tenantConnectionString))
         {
-            const string tenantSql = "UPDATE ChatSessions SET HistoryJson = @HistoryJson, UpdatedAt = @UpdatedAt WHERE Id = @Id";
-            using var connection = new SqlConnection(_tenantConnectionString);
+            const string tenantSql = "UPDATE chat_sessions SET history_json = @HistoryJson::jsonb, updated_at = @UpdatedAt WHERE id = @Id";
+            using var connection = new NpgsqlConnection(_tenantConnectionString);
             var rows = await connection.ExecuteAsync(tenantSql, new
             {
                 HistoryJson = json,
@@ -109,7 +110,7 @@ public class SqlChatSessionRepository : IChatSessionRepository
             updatedInTenant = rows > 0;
         }
 
-        // 2. Backup Write (AgentCore) - Fire & Forget
+        // 2. Backup Write (AgentCore - SQL Server) - Fire & Forget
         _ = Task.Run(async () =>
         {
             try
@@ -126,19 +127,14 @@ public class SqlChatSessionRepository : IChatSessionRepository
 
                 if (rows == 0 && !updatedInTenant)
                 {
-                    // If it wasn't in AgentCore and we couldn't update it anywhere, insert it (sync might be better here but following dual pattern)
                     await InsertChatHistoryAsync(sessionId, tenantId, history, userPhone);
                 }
             }
-            catch
-            {
-                // Log warning only
-            }
+            catch { }
         });
 
         if (!updatedInTenant && !string.IsNullOrEmpty(_tenantConnectionString))
         {
-            // If it's a new session for the tenant DB, we insert it synchronously
             await InsertChatHistoryAsync(sessionId, tenantId, history, userPhone);
         }
     }
@@ -148,24 +144,19 @@ public class SqlChatSessionRepository : IChatSessionRepository
         var json = JsonSerializer.Serialize(history.ToList());
         var now = DateTime.UtcNow;
 
-        // 1. Primary: Tenant DB
+        // 1. Primary: Tenant DB (PostgreSQL)
         if (!string.IsNullOrEmpty(_tenantConnectionString))
         {
             try
             {
                 const string tenantSql = @"
-                    IF NOT EXISTS (SELECT 1 FROM ChatSessions WHERE Id = @Id)
-                    BEGIN
-                        INSERT INTO ChatSessions (Id, UserPhone, HistoryJson, NeedsHumanAttention, CreatedAt, UpdatedAt)
-                        VALUES (@Id, @UserPhone, @HistoryJson, 0, @CreatedAt, @UpdatedAt)
-                    END
-                    ELSE
-                    BEGIN
-                        UPDATE ChatSessions SET HistoryJson = @HistoryJson, UpdatedAt = @UpdatedAt 
-                        WHERE Id = @Id
-                    END";
+                    INSERT INTO chat_sessions (id, user_phone, history_json, needs_human_attention, created_at, updated_at)
+                    VALUES (@Id, @UserPhone, @HistoryJson::jsonb, false, @CreatedAt, @UpdatedAt)
+                    ON CONFLICT (id) DO UPDATE SET 
+                        history_json = EXCLUDED.history_json, 
+                        updated_at = EXCLUDED.updated_at";
 
-                using var connection = new SqlConnection(_tenantConnectionString);
+                using var connection = new NpgsqlConnection(_tenantConnectionString);
                 await connection.ExecuteAsync(tenantSql, new
                 {
                     Id = sessionId,
@@ -175,10 +166,10 @@ public class SqlChatSessionRepository : IChatSessionRepository
                     UpdatedAt = now
                 });
             }
-            catch { /* Continue to backup */ }
+            catch { }
         }
 
-        // 2. Backup: AgentCore
+        // 2. Backup: AgentCore (SQL Server)
         try
         {
             const string coreSql = @"
@@ -204,25 +195,25 @@ public class SqlChatSessionRepository : IChatSessionRepository
                 UpdatedAt = now
             });
         }
-        catch { /* Robustness for backup write */ }
+        catch { }
     }
 
     public async Task SetNeedsHumanAttentionAsync(Guid sessionId, string tenantId, bool needsAttention)
     {
-        // 1. Primary: Tenant DB
+        // 1. Primary: Tenant DB (PostgreSQL)
         if (!string.IsNullOrEmpty(_tenantConnectionString))
         {
-            const string tenantSql = "UPDATE ChatSessions SET NeedsHumanAttention = @NeedsAttention, UpdatedAt = @UpdatedAt WHERE Id = @Id";
-            using var connection = new SqlConnection(_tenantConnectionString);
+            const string tenantSql = "UPDATE chat_sessions SET needs_human_attention = @NeedsAttention, updated_at = @UpdatedAt WHERE id = @Id";
+            using var connection = new NpgsqlConnection(_tenantConnectionString);
             await connection.ExecuteAsync(tenantSql, new
             {
-                NeedsAttention = needsAttention ? 1 : 0,
+                NeedsAttention = needsAttention,
                 UpdatedAt = DateTime.UtcNow,
                 Id = sessionId
             });
         }
 
-        // 2. Backup: AgentCore - Fire & Forget
+        // 2. Backup: AgentCore (SQL Server) - Fire & Forget
         _ = Task.Run(async () =>
         {
             try
@@ -243,24 +234,24 @@ public class SqlChatSessionRepository : IChatSessionRepository
 
     public async Task<List<ReceptionistAgent.Core.Models.ChatSessionDto>> GetActiveSessionsAsync(string tenantId)
     {
-        // Primary: Tenant DB
+        // Primary: Tenant DB (PostgreSQL)
         if (!string.IsNullOrEmpty(_tenantConnectionString))
         {
             try
             {
                 const string sql = @"
-                    SELECT Id, UserPhone, NeedsHumanAttention, CreatedAt, UpdatedAt 
-                    FROM ChatSessions 
-                    ORDER BY UpdatedAt DESC";
+                    SELECT id as Id, user_phone as UserPhone, needs_human_attention as NeedsHumanAttention, created_at as CreatedAt, updated_at as UpdatedAt 
+                    FROM chat_sessions 
+                    ORDER BY updated_at DESC";
 
-                using var connection = new SqlConnection(_tenantConnectionString);
+                using var connection = new NpgsqlConnection(_tenantConnectionString);
                 var sessions = await connection.QueryAsync<ReceptionistAgent.Core.Models.ChatSessionDto>(sql);
                 return sessions.Select(s => { s.TenantId = tenantId; return s; }).ToList();
             }
             catch { }
         }
 
-        // Fallback: AgentCore
+        // Fallback: AgentCore (SQL Server)
         const string coreSql = @"
             SELECT Id, TenantId, UserPhone, NeedsHumanAttention, CreatedAt, UpdatedAt 
             FROM ChatSessions 

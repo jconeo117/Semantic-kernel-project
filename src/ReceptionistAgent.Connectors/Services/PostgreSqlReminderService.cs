@@ -1,4 +1,5 @@
 using Dapper;
+using Npgsql;
 using Microsoft.Data.SqlClient;
 using ReceptionistAgent.Core.Models;
 using ReceptionistAgent.Core.Services;
@@ -7,15 +8,15 @@ using ReceptionistAgent.Core.Utils;
 namespace ReceptionistAgent.Connectors.Services;
 
 /// <summary>
-/// Servicio de recordatorios respaldado por SQL Server.
-/// Agenda recordatorios a 24h y 1-2h antes de la cita.
+/// Servicio de recordatorios respaldado por PostgreSQL.
+/// Maneja escritura primaria en Postgres y backup en SQL Server (AgentCore).
 /// </summary>
-public class SqlReminderService : IReminderService
+public class PostgreSqlReminderService : IReminderService
 {
     private readonly string _agentCoreConnectionString;
     private readonly string? _tenantConnectionString;
 
-    public SqlReminderService(string agentCoreConnectionString, string? tenantConnectionString = null)
+    public PostgreSqlReminderService(string agentCoreConnectionString, string? tenantConnectionString = null)
     {
         _agentCoreConnectionString = agentCoreConnectionString;
         _tenantConnectionString = tenantConnectionString;
@@ -25,7 +26,6 @@ public class SqlReminderService : IReminderService
     {
         var normalizedPhone = PhoneNormalizer.Normalize(recipientPhone, countryCode);
 
-        // Convertir la fecha/hora local de la cita a UTC
         DateTime appointmentDateTimeUtc;
         try
         {
@@ -35,13 +35,11 @@ public class SqlReminderService : IReminderService
         }
         catch
         {
-            // Fallback a UTC si el ID es inválido
             appointmentDateTimeUtc = booking.ScheduledDate.Date + booking.ScheduledTime;
         }
 
         var reminders = new List<Reminder>
         {
-            // Recordatorio 24h antes
             new()
             {
                 TenantId = booking.TenantId,
@@ -51,7 +49,6 @@ public class SqlReminderService : IReminderService
                 RecipientPhone = normalizedPhone,
                 MessageContent = $"Recordatorio: Tiene una cita mañana {booking.ScheduledDate:yyyy-MM-dd} a las {booking.ScheduledTime:hh\\:mm} con {booking.ProviderName}. Código: {booking.ConfirmationCode}. Recuerde llegar 15 minutos antes."
             },
-            // Recordatorio 1h antes
             new()
             {
                 TenantId = booking.TenantId,
@@ -63,22 +60,21 @@ public class SqlReminderService : IReminderService
             }
         };
 
-        // Solo agendar reminders futuros (comparando UTC vs UTC)
         var now = DateTime.UtcNow;
         var futureReminders = reminders.Where(r => r.ScheduledFor > now).ToList();
 
         if (!futureReminders.Any()) return;
 
-        // 1. Primary Write (Tenant DB)
+        // 1. Primary Write (Tenant DB - PostgreSQL)
         if (!string.IsNullOrEmpty(_tenantConnectionString))
         {
             try
             {
                 const string tenantSql = @"
-                    INSERT INTO Reminders (Id, BookingId, ReminderType, ScheduledFor, Status, Channel, RecipientPhone, MessageContent, CreatedAt)
+                    INSERT INTO reminders (id, booking_id, reminder_type, scheduled_for, status, channel, recipient_phone, message_content, created_at)
                     VALUES (@Id, @BookingId, @ReminderType, @ScheduledFor, @Status, @Channel, @RecipientPhone, @MessageContent, @CreatedAt)";
 
-                using var connection = new SqlConnection(_tenantConnectionString);
+                using var connection = new NpgsqlConnection(_tenantConnectionString);
                 foreach (var reminder in futureReminders)
                 {
                     await connection.ExecuteAsync(tenantSql, new
@@ -95,10 +91,10 @@ public class SqlReminderService : IReminderService
                     });
                 }
             }
-            catch { /* Continuar al backup centralizado */ }
+            catch { }
         }
 
-        // 2. Backup Write (AgentCore) - Fire & Forget
+        // 2. Backup Write (AgentCore - SQL Server) - Fire & Forget
         _ = Task.Run(async () =>
         {
             try
@@ -131,38 +127,47 @@ public class SqlReminderService : IReminderService
 
     public async Task<List<Reminder>> GetPendingRemindersAsync(DateTime before)
     {
-        // Si hay connection string de tenant, leemos de ahí (proceso per-tenant en v5)
-        var connStr = !string.IsNullOrEmpty(_tenantConnectionString) ? _tenantConnectionString : _agentCoreConnectionString;
+        // For PostgreSQL, we only read from the tenant DB if configured, otherwise fallback to AgentCore (SQL Server)
+        if (!string.IsNullOrEmpty(_tenantConnectionString))
+        {
+            const string sql = @"
+                SELECT id as Id, booking_id as BookingId, reminder_type as ReminderType, scheduled_for as ScheduledFor, 
+                       status as Status, channel as Channel, recipient_phone as RecipientPhone, 
+                       message_content as MessageContent, created_at as CreatedAt
+                FROM reminders
+                WHERE status = 'Pending' AND scheduled_for <= @Before
+                ORDER BY scheduled_for";
 
-        const string sql = @"
-            SELECT * FROM Reminders
-            WHERE Status = 'Pending' AND ScheduledFor <= @Before
-            ORDER BY ScheduledFor";
-
-        using var connection = new SqlConnection(connStr);
-        var entities = await connection.QueryAsync<ReminderEntity>(sql, new { Before = before });
-
-        return entities.Select(MapToModel).ToList();
+            using var connection = new NpgsqlConnection(_tenantConnectionString);
+            var entities = await connection.QueryAsync<ReminderEntity>(sql, new { Before = before });
+            return entities.Select(MapToModel).ToList();
+        }
+        else
+        {
+            const string coreSql = "SELECT * FROM Reminders WHERE Status = 'Pending' AND ScheduledFor <= @Before ORDER BY ScheduledFor";
+            using var connection = new SqlConnection(_agentCoreConnectionString);
+            var entities = await connection.QueryAsync<ReminderEntity>(coreSql, new { Before = before });
+            return entities.Select(MapToModel).ToList();
+        }
     }
 
     public async Task MarkAsSentAsync(Guid reminderId)
     {
-        const string sql = "UPDATE Reminders SET Status = 'Sent', SentAt = @Now WHERE Id = @Id";
+        const string pgSql = "UPDATE reminders SET status = 'Sent', sent_at = @Now WHERE id = @Id";
+        const string sqlServerSql = "UPDATE Reminders SET Status = 'Sent', SentAt = @Now WHERE Id = @Id";
 
-        // Actualizar en DB del cliente si aplica
         if (!string.IsNullOrEmpty(_tenantConnectionString))
         {
-            using var connection = new SqlConnection(_tenantConnectionString);
-            await connection.ExecuteAsync(sql, new { Id = reminderId, Now = DateTime.UtcNow });
+            using var connection = new NpgsqlConnection(_tenantConnectionString);
+            await connection.ExecuteAsync(pgSql, new { Id = reminderId, Now = DateTime.UtcNow });
         }
 
-        // Backup centralizado (asíncrono)
         _ = Task.Run(async () =>
         {
             try
             {
                 using var coreConnection = new SqlConnection(_agentCoreConnectionString);
-                await coreConnection.ExecuteAsync(sql, new { Id = reminderId, Now = DateTime.UtcNow });
+                await coreConnection.ExecuteAsync(sqlServerSql, new { Id = reminderId, Now = DateTime.UtcNow });
             }
             catch { }
         });
@@ -170,12 +175,13 @@ public class SqlReminderService : IReminderService
 
     public async Task MarkAsFailedAsync(Guid reminderId, string error)
     {
-        const string sql = "UPDATE Reminders SET Status = 'Failed', ErrorMessage = @Error WHERE Id = @Id";
+        const string pgSql = "UPDATE reminders SET status = 'Failed', error_message = @Error WHERE id = @Id";
+        const string sqlServerSql = "UPDATE Reminders SET Status = 'Failed', ErrorMessage = @Error WHERE Id = @Id";
 
         if (!string.IsNullOrEmpty(_tenantConnectionString))
         {
-            using var connection = new SqlConnection(_tenantConnectionString);
-            await connection.ExecuteAsync(sql, new { Id = reminderId, Error = error });
+            using var connection = new NpgsqlConnection(_tenantConnectionString);
+            await connection.ExecuteAsync(pgSql, new { Id = reminderId, Error = error });
         }
 
         _ = Task.Run(async () =>
@@ -183,7 +189,7 @@ public class SqlReminderService : IReminderService
             try
             {
                 using var coreConnection = new SqlConnection(_agentCoreConnectionString);
-                await coreConnection.ExecuteAsync(sql, new { Id = reminderId, Error = error });
+                await coreConnection.ExecuteAsync(sqlServerSql, new { Id = reminderId, Error = error });
             }
             catch { }
         });
@@ -191,12 +197,13 @@ public class SqlReminderService : IReminderService
 
     public async Task CancelRemindersForBookingAsync(Guid bookingId)
     {
-        const string sql = "UPDATE Reminders SET Status = 'Cancelled' WHERE BookingId = @BookingId AND Status = 'Pending'";
+        const string pgSql = "UPDATE reminders SET status = 'Cancelled' WHERE booking_id = @BookingId AND status = 'Pending'";
+        const string sqlServerSql = "UPDATE Reminders SET Status = 'Cancelled' WHERE BookingId = @BookingId AND Status = 'Pending'";
 
         if (!string.IsNullOrEmpty(_tenantConnectionString))
         {
-            using var connection = new SqlConnection(_tenantConnectionString);
-            await connection.ExecuteAsync(sql, new { BookingId = bookingId });
+            using var connection = new NpgsqlConnection(_tenantConnectionString);
+            await connection.ExecuteAsync(pgSql, new { BookingId = bookingId });
         }
 
         _ = Task.Run(async () =>
@@ -204,7 +211,7 @@ public class SqlReminderService : IReminderService
             try
             {
                 using var coreConnection = new SqlConnection(_agentCoreConnectionString);
-                await coreConnection.ExecuteAsync(sql, new { BookingId = bookingId });
+                await coreConnection.ExecuteAsync(sqlServerSql, new { BookingId = bookingId });
             }
             catch { }
         });
