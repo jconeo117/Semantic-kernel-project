@@ -23,7 +23,12 @@ public class ClientDataAdapterFactoryTests
         _mockLoggerFactory.Setup(f => f.CreateLogger(It.IsAny<string>()))
             .Returns(new Mock<ILogger>().Object);
 
-        _factory = new ClientDataAdapterFactory(_mockBackup.Object, _mockLoggerFactory.Object);
+        var providers = new List<IDataAdapterProvider>
+        {
+            new SqlServerAdapterProvider()
+        };
+
+        _factory = new ClientDataAdapterFactory(_mockBackup.Object, _mockLoggerFactory.Object, providers);
     }
 
     [Fact]
