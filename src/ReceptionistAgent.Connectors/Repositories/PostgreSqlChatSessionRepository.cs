@@ -5,6 +5,7 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using System.Text.Json;
 using ReceptionistAgent.Core.Session;
+using ReceptionistAgent.Core.Models;
 
 namespace ReceptionistAgent.Connectors.Repositories;
 
@@ -17,7 +18,9 @@ public class PostgreSqlChatSessionRepository : IChatSessionRepository
     {
         _agentCoreConnectionString = agentCoreConnectionString;
         _tenantConnectionString = tenantConnectionString;
+        _isCorePostgres = agentCoreConnectionString.Contains("Host=", StringComparison.OrdinalIgnoreCase);
     }
+    private readonly bool _isCorePostgres;
 
     public async Task<ChatHistory> GetChatHistoryAsync(Guid sessionId, string tenantId, string systemPrompt, string? userPhone = null)
     {
@@ -41,9 +44,12 @@ public class PostgreSqlChatSessionRepository : IChatSessionRepository
             }
         }
 
-        // Fallback: AgentCore (SQL Server)
-        const string coreSql = "SELECT HistoryJson FROM ChatSessions WHERE Id = @Id AND TenantId = @TenantId";
-        using (var connection = new SqlConnection(_agentCoreConnectionString))
+        // Fallback: AgentCore
+        string coreSql = _isCorePostgres
+            ? "SELECT history_json FROM chat_sessions WHERE id = @Id"
+            : "SELECT HistoryJson FROM ChatSessions WHERE Id = @Id AND TenantId = @TenantId";
+
+        using (var connection = _isCorePostgres ? (System.Data.IDbConnection)new NpgsqlConnection(_agentCoreConnectionString) : new SqlConnection(_agentCoreConnectionString))
         {
             var json = await connection.QuerySingleOrDefaultAsync<string>(coreSql, new { Id = sessionId, TenantId = tenantId });
 
@@ -110,13 +116,16 @@ public class PostgreSqlChatSessionRepository : IChatSessionRepository
             updatedInTenant = rows > 0;
         }
 
-        // 2. Backup Write (AgentCore - SQL Server) - Fire & Forget
+        // 2. Backup Write (AgentCore) - Fire & Forget
         _ = Task.Run(async () =>
         {
             try
             {
-                const string coreSql = "UPDATE ChatSessions SET HistoryJson = @HistoryJson, UpdatedAt = @UpdatedAt WHERE Id = @Id AND TenantId = @TenantId";
-                using var connection = new SqlConnection(_agentCoreConnectionString);
+                string coreSql = _isCorePostgres
+                    ? "UPDATE chat_sessions SET history_json = @HistoryJson::jsonb, updated_at = @UpdatedAt WHERE id = @Id"
+                    : "UPDATE ChatSessions SET HistoryJson = @HistoryJson, UpdatedAt = @UpdatedAt WHERE Id = @Id AND TenantId = @TenantId";
+
+                using var connection = _isCorePostgres ? (System.Data.IDbConnection)new NpgsqlConnection(_agentCoreConnectionString) : new SqlConnection(_agentCoreConnectionString);
                 var rows = await connection.ExecuteAsync(coreSql, new
                 {
                     HistoryJson = json,
@@ -169,22 +178,35 @@ public class PostgreSqlChatSessionRepository : IChatSessionRepository
             catch { }
         }
 
-        // 2. Backup: AgentCore (SQL Server)
+        // 2. Backup: AgentCore
         try
         {
-            const string coreSql = @"
-                IF NOT EXISTS (SELECT 1 FROM ChatSessions WHERE Id = @Id)
-                BEGIN
-                    INSERT INTO ChatSessions (Id, TenantId, UserPhone, HistoryJson, NeedsHumanAttention, CreatedAt, UpdatedAt)
-                    VALUES (@Id, @TenantId, @UserPhone, @HistoryJson, 0, @CreatedAt, @UpdatedAt)
-                END
-                ELSE
-                BEGIN
-                    UPDATE ChatSessions SET HistoryJson = @HistoryJson, UpdatedAt = @UpdatedAt 
-                    WHERE Id = @Id AND TenantId = @TenantId
-                END";
+            string coreSql;
+            if (_isCorePostgres)
+            {
+                coreSql = @"
+                    INSERT INTO chat_sessions (id, user_phone, history_json, needs_human_attention, created_at, updated_at)
+                    VALUES (@Id, @UserPhone, @HistoryJson::jsonb, false, @CreatedAt, @UpdatedAt)
+                    ON CONFLICT (id) DO UPDATE SET 
+                        history_json = EXCLUDED.history_json, 
+                        updated_at = EXCLUDED.updated_at";
+            }
+            else
+            {
+                coreSql = @"
+                    IF NOT EXISTS (SELECT 1 FROM ChatSessions WHERE Id = @Id)
+                    BEGIN
+                        INSERT INTO ChatSessions (Id, TenantId, UserPhone, HistoryJson, NeedsHumanAttention, CreatedAt, UpdatedAt)
+                        VALUES (@Id, @TenantId, @UserPhone, @HistoryJson, 0, @CreatedAt, @UpdatedAt)
+                    END
+                    ELSE
+                    BEGIN
+                        UPDATE ChatSessions SET HistoryJson = @HistoryJson, UpdatedAt = @UpdatedAt 
+                        WHERE Id = @Id AND TenantId = @TenantId
+                    END";
+            }
 
-            using var coreConnection = new SqlConnection(_agentCoreConnectionString);
+            using var coreConnection = _isCorePostgres ? (System.Data.IDbConnection)new NpgsqlConnection(_agentCoreConnectionString) : new SqlConnection(_agentCoreConnectionString);
             await coreConnection.ExecuteAsync(coreSql, new
             {
                 Id = sessionId,
@@ -213,16 +235,19 @@ public class PostgreSqlChatSessionRepository : IChatSessionRepository
             });
         }
 
-        // 2. Backup: AgentCore (SQL Server) - Fire & Forget
+        // 2. Backup: AgentCore - Fire & Forget
         _ = Task.Run(async () =>
         {
             try
             {
-                const string coreSql = "UPDATE ChatSessions SET NeedsHumanAttention = @NeedsAttention, UpdatedAt = @UpdatedAt WHERE Id = @Id AND TenantId = @TenantId";
-                using var connection = new SqlConnection(_agentCoreConnectionString);
+                string coreSql = _isCorePostgres
+                    ? "UPDATE chat_sessions SET needs_human_attention = @NeedsAttention, updated_at = @UpdatedAt WHERE id = @Id"
+                    : "UPDATE ChatSessions SET NeedsHumanAttention = @NeedsAttention, UpdatedAt = @UpdatedAt WHERE Id = @Id AND TenantId = @TenantId";
+
+                using var connection = _isCorePostgres ? (System.Data.IDbConnection)new NpgsqlConnection(_agentCoreConnectionString) : new SqlConnection(_agentCoreConnectionString);
                 await connection.ExecuteAsync(coreSql, new
                 {
-                    NeedsAttention = needsAttention ? 1 : 0,
+                    NeedsAttention = _isCorePostgres ? (object)needsAttention : (object)(needsAttention ? 1 : 0),
                     UpdatedAt = DateTime.UtcNow,
                     Id = sessionId,
                     TenantId = tenantId
@@ -251,15 +276,13 @@ public class PostgreSqlChatSessionRepository : IChatSessionRepository
             catch { }
         }
 
-        // Fallback: AgentCore (SQL Server)
-        const string coreSql = @"
-            SELECT Id, TenantId, UserPhone, NeedsHumanAttention, CreatedAt, UpdatedAt 
-            FROM ChatSessions 
-            WHERE TenantId = @TenantId 
-            ORDER BY UpdatedAt DESC";
+        // Fallback: AgentCore
+        string coreSql = _isCorePostgres
+            ? "SELECT id as Id, user_phone as UserPhone, needs_human_attention as NeedsHumanAttention, created_at as CreatedAt, updated_at as UpdatedAt FROM chat_sessions ORDER BY updated_at DESC"
+            : "SELECT Id, TenantId, UserPhone, NeedsHumanAttention, CreatedAt, UpdatedAt FROM ChatSessions WHERE TenantId = @TenantId ORDER BY UpdatedAt DESC";
 
-        using var coreConnection = new SqlConnection(_agentCoreConnectionString);
+        using var coreConnection = _isCorePostgres ? (System.Data.IDbConnection)new NpgsqlConnection(_agentCoreConnectionString) : new SqlConnection(_agentCoreConnectionString);
         var coreSessions = await coreConnection.QueryAsync<ReceptionistAgent.Core.Models.ChatSessionDto>(coreSql, new { TenantId = tenantId });
-        return coreSessions.ToList();
+        return coreSessions.Select(s => { if (_isCorePostgres) s.TenantId = tenantId; return s; }).ToList();
     }
 }

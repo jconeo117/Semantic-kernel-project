@@ -77,7 +77,7 @@ public class PostgreSqlClientDataAdapter : IClientDataAdapter
             booking.ProviderId,
             booking.ProviderName,
             booking.ScheduledDate,
-            booking.ScheduledTime,
+            ScheduledTime = TimeOnly.FromTimeSpan(booking.ScheduledTime),
             Status = booking.Status.ToString(),
             booking.CreatedAt,
             CustomFieldsJson = JsonSerializer.Serialize(booking.CustomFields)
@@ -145,7 +145,7 @@ public class PostgreSqlClientDataAdapter : IClientDataAdapter
             booking.ProviderId,
             booking.ProviderName,
             booking.ScheduledDate,
-            booking.ScheduledTime,
+            ScheduledTime = TimeOnly.FromTimeSpan(booking.ScheduledTime),
             Status = booking.Status.ToString(),
             booking.UpdatedAt,
             CustomFieldsJson = JsonSerializer.Serialize(booking.CustomFields),
@@ -186,7 +186,7 @@ public class PostgreSqlClientDataAdapter : IClientDataAdapter
         {
             ProviderId = providerId,
             Date = date.Date,
-            Time = time,
+            Time = TimeOnly.FromTimeSpan(time), // Convert TimeSpan to TimeOnly for Postgres input
             CancelledStatus = BookingStatus.Cancelled.ToString()
         });
 
@@ -228,7 +228,7 @@ public class PostgreSqlClientDataAdapter : IClientDataAdapter
             ProviderId = entity.provider_id,
             ProviderName = entity.provider_name,
             ScheduledDate = entity.scheduled_date,
-            ScheduledTime = entity.scheduled_time,
+            ScheduledTime = entity.scheduled_time.ToTimeSpan(),
             Status = Enum.TryParse<BookingStatus>(entity.status, true, out var status) ? status : BookingStatus.Scheduled,
             CreatedAt = entity.created_at,
             UpdatedAt = entity.updated_at,
@@ -246,8 +246,8 @@ public class PostgreSqlClientDataAdapter : IClientDataAdapter
             Name = entity.name,
             Role = entity.role,
             WorkingDays = ParseWorkingDays(entity.working_days),
-            StartTime = entity.start_time,
-            EndTime = entity.end_time,
+            StartTime = entity.start_time.ToTimeSpan(),
+            EndTime = entity.end_time.ToTimeSpan(),
             SlotDurationMinutes = entity.slot_duration_min,
             IsAvailable = entity.is_active
         };
@@ -287,7 +287,7 @@ public class PostgreSqlClientDataAdapter : IClientDataAdapter
         public string provider_id { get; set; } = string.Empty;
         public string provider_name { get; set; } = string.Empty;
         public DateTime scheduled_date { get; set; }
-        public TimeSpan scheduled_time { get; set; }
+        public TimeOnly scheduled_time { get; set; }
         public string status { get; set; } = string.Empty;
         public DateTime created_at { get; set; }
         public DateTime? updated_at { get; set; }
@@ -300,8 +300,8 @@ public class PostgreSqlClientDataAdapter : IClientDataAdapter
         public string name { get; set; } = string.Empty;
         public string role { get; set; } = string.Empty;
         public string? working_days { get; set; }
-        public TimeSpan start_time { get; set; }
-        public TimeSpan end_time { get; set; }
+        public TimeOnly start_time { get; set; }
+        public TimeOnly end_time { get; set; }
         public int slot_duration_min { get; set; }
         public bool is_active { get; set; }
     }

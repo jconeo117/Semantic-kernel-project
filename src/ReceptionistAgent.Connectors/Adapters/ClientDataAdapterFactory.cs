@@ -16,31 +16,30 @@ public class ClientDataAdapterFactory
 {
     private readonly IBookingBackupService _backupService;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly IEnumerable<IDataAdapterProvider> _providers;
 
-    public ClientDataAdapterFactory(IBookingBackupService backupService, ILoggerFactory loggerFactory)
+    public ClientDataAdapterFactory(
+        IBookingBackupService backupService, 
+        ILoggerFactory loggerFactory,
+        IEnumerable<IDataAdapterProvider> providers)
     {
         _backupService = backupService;
         _loggerFactory = loggerFactory;
+        _providers = providers;
     }
 
     public IClientDataAdapter CreateAdapter(TenantConfiguration tenantConfig)
     {
-        if (tenantConfig.DbType.Equals("PostgreSql", StringComparison.OrdinalIgnoreCase))
+        var provider = _providers.FirstOrDefault(p => p.Supports(tenantConfig.DbType));
+        if (provider != null)
         {
             if (string.IsNullOrWhiteSpace(tenantConfig.ConnectionString))
-                throw new InvalidOperationException($"Tenant '{tenantConfig.TenantId}' specified PostgreSql but no ConnectionString was found.");
+                throw new InvalidOperationException($"Tenant '{tenantConfig.TenantId}' specified {tenantConfig.DbType} but no ConnectionString was found.");
 
-            return new PostgreSqlClientDataAdapter(tenantConfig.ConnectionString, _backupService, _loggerFactory.CreateLogger<PostgreSqlClientDataAdapter>());
+            return provider.CreateAdapter(tenantConfig.ConnectionString, _backupService, _loggerFactory);
         }
 
-        if (tenantConfig.DbType.Equals("SqlServer", StringComparison.OrdinalIgnoreCase))
-        {
-            if (string.IsNullOrWhiteSpace(tenantConfig.ConnectionString))
-                throw new InvalidOperationException($"Tenant '{tenantConfig.TenantId}' specified SqlServer but no ConnectionString was found.");
-
-            return new SqlClientDataAdapter(tenantConfig.ConnectionString, _backupService, _loggerFactory.CreateLogger<SqlClientDataAdapter>());
-        }
-
+        // Fallback or legacy InMemory handling
         var providers = tenantConfig.Providers.Select(p => new ServiceProvider
         {
             Id = p.Id,

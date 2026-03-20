@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
+using ReceptionistAgent.Core.Session;
+using ReceptionistAgent.Core.Models;
 
 namespace ReceptionistAgent.Connectors.Repositories;
 

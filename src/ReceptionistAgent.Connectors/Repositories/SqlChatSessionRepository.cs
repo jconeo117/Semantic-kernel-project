@@ -3,7 +3,8 @@ using Microsoft.Data.SqlClient;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using System.Text.Json;
-using System.Collections.Concurrent;
+using ReceptionistAgent.Core.Session;
+using ReceptionistAgent.Core.Models;
 
 namespace ReceptionistAgent.Connectors.Repositories;
 

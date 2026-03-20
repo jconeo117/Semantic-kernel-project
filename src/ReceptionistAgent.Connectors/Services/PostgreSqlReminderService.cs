@@ -20,7 +20,9 @@ public class PostgreSqlReminderService : IReminderService
     {
         _agentCoreConnectionString = agentCoreConnectionString;
         _tenantConnectionString = tenantConnectionString;
+        _isCorePostgres = agentCoreConnectionString.Contains("Host=", StringComparison.OrdinalIgnoreCase);
     }
+    private readonly bool _isCorePostgres;
 
     public async Task ScheduleRemindersForBookingAsync(BookingRecord booking, string recipientPhone, string countryCode = "", string timeZoneId = "UTC")
     {
@@ -94,16 +96,16 @@ public class PostgreSqlReminderService : IReminderService
             catch { }
         }
 
-        // 2. Backup Write (AgentCore - SQL Server) - Fire & Forget
+        // 2. Backup Write (AgentCore) - Fire & Forget
         _ = Task.Run(async () =>
         {
             try
             {
-                const string coreSql = @"
-                    INSERT INTO Reminders (Id, TenantId, BookingId, ReminderType, ScheduledFor, Status, Channel, RecipientPhone, MessageContent, CreatedAt)
-                    VALUES (@Id, @TenantId, @BookingId, @ReminderType, @ScheduledFor, @Status, @Channel, @RecipientPhone, @MessageContent, @CreatedAt)";
+                string coreSql = _isCorePostgres
+                    ? "INSERT INTO reminders (id, tenant_id, booking_id, reminder_type, scheduled_for, status, channel, recipient_phone, message_content, created_at) VALUES (@Id, @TenantId, @BookingId, @ReminderType, @ScheduledFor, @Status, @Channel, @RecipientPhone, @MessageContent, @CreatedAt)"
+                    : "INSERT INTO Reminders (Id, TenantId, BookingId, ReminderType, ScheduledFor, Status, Channel, RecipientPhone, MessageContent, CreatedAt) VALUES (@Id, @TenantId, @BookingId, @ReminderType, @ScheduledFor, @Status, @Channel, @RecipientPhone, @MessageContent, @CreatedAt)";
 
-                using var coreConnection = new SqlConnection(_agentCoreConnectionString);
+                using var coreConnection = _isCorePostgres ? (System.Data.IDbConnection)new NpgsqlConnection(_agentCoreConnectionString) : new SqlConnection(_agentCoreConnectionString);
                 foreach (var reminder in futureReminders)
                 {
                     await coreConnection.ExecuteAsync(coreSql, new
@@ -144,8 +146,11 @@ public class PostgreSqlReminderService : IReminderService
         }
         else
         {
-            const string coreSql = "SELECT * FROM Reminders WHERE Status = 'Pending' AND ScheduledFor <= @Before ORDER BY ScheduledFor";
-            using var connection = new SqlConnection(_agentCoreConnectionString);
+            string coreSql = _isCorePostgres
+                ? "SELECT id as Id, tenant_id as TenantId, booking_id as BookingId, reminder_type as ReminderType, scheduled_for as ScheduledFor, status as Status, channel as Channel, recipient_phone as RecipientPhone, message_content as MessageContent, created_at as CreatedAt FROM reminders WHERE status = 'Pending' AND scheduled_for <= @Before ORDER BY scheduled_for"
+                : "SELECT * FROM Reminders WHERE Status = 'Pending' AND ScheduledFor <= @Before ORDER BY ScheduledFor";
+            
+            using var connection = _isCorePostgres ? (System.Data.IDbConnection)new NpgsqlConnection(_agentCoreConnectionString) : new SqlConnection(_agentCoreConnectionString);
             var entities = await connection.QueryAsync<ReminderEntity>(coreSql, new { Before = before });
             return entities.Select(MapToModel).ToList();
         }
@@ -166,8 +171,10 @@ public class PostgreSqlReminderService : IReminderService
         {
             try
             {
-                using var coreConnection = new SqlConnection(_agentCoreConnectionString);
-                await coreConnection.ExecuteAsync(sqlServerSql, new { Id = reminderId, Now = DateTime.UtcNow });
+                string sql = _isCorePostgres ? pgSql : sqlServerSql;
+
+                using var coreConnection = _isCorePostgres ? (System.Data.IDbConnection)new NpgsqlConnection(_agentCoreConnectionString) : new SqlConnection(_agentCoreConnectionString);
+                await coreConnection.ExecuteAsync(sql, new { Id = reminderId, Now = DateTime.UtcNow });
             }
             catch { }
         });
@@ -188,8 +195,10 @@ public class PostgreSqlReminderService : IReminderService
         {
             try
             {
-                using var coreConnection = new SqlConnection(_agentCoreConnectionString);
-                await coreConnection.ExecuteAsync(sqlServerSql, new { Id = reminderId, Error = error });
+                string sql = _isCorePostgres ? pgSql : sqlServerSql;
+
+                using var coreConnection = _isCorePostgres ? (System.Data.IDbConnection)new NpgsqlConnection(_agentCoreConnectionString) : new SqlConnection(_agentCoreConnectionString);
+                await coreConnection.ExecuteAsync(sql, new { Id = reminderId, Error = error });
             }
             catch { }
         });
@@ -210,8 +219,10 @@ public class PostgreSqlReminderService : IReminderService
         {
             try
             {
-                using var coreConnection = new SqlConnection(_agentCoreConnectionString);
-                await coreConnection.ExecuteAsync(sqlServerSql, new { BookingId = bookingId });
+                string sql = _isCorePostgres ? pgSql : sqlServerSql;
+
+                using var coreConnection = _isCorePostgres ? (System.Data.IDbConnection)new NpgsqlConnection(_agentCoreConnectionString) : new SqlConnection(_agentCoreConnectionString);
+                await coreConnection.ExecuteAsync(sql, new { BookingId = bookingId });
             }
             catch { }
         });
