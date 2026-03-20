@@ -48,9 +48,8 @@ public class ReminderBackgroundService : BackgroundService
     private async Task ProcessPendingRemindersAsync(CancellationToken ct)
     {
         using var rootScope = _serviceProvider.CreateScope();
-        var tenantRepo = rootScope.ServiceProvider.GetRequiredService<SqlTenantRepository>();
-        
-        // Obtenemos todos los tenants que usan SQL Server
+        var tenantRepo = rootScope.ServiceProvider.GetRequiredService<ITenantResolver>();
+        var tenantIds = await tenantRepo.GetAllTenantIdsAsync();
         var tenants = await tenantRepo.GetAllTenantsAsync();
         var sqlTenants = tenants.Where(t => t.DbType.Equals("SqlServer", StringComparison.OrdinalIgnoreCase)).ToList();
 

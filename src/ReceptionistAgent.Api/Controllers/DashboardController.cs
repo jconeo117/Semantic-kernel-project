@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.SemanticKernel.ChatCompletion;
+using ReceptionistAgent.Core.Session;
 using ReceptionistAgent.Connectors.Repositories;
 using ReceptionistAgent.Core.Services;
 using ReceptionistAgent.Core.Tenant;

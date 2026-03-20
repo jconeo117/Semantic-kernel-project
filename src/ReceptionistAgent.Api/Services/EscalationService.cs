@@ -1,5 +1,5 @@
 using ReceptionistAgent.AI.Services;
-using ReceptionistAgent.Connectors.Repositories;
+using ReceptionistAgent.Core.Session;
 
 namespace ReceptionistAgent.Api.Services;
 

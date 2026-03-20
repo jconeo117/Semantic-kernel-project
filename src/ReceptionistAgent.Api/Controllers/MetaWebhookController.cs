@@ -131,21 +131,18 @@ public class MetaWebhookController : ControllerBase
         var tenantResolver = scope.ServiceProvider.GetRequiredService<ITenantResolver>();
         var tenantContext = scope.ServiceProvider.GetRequiredService<TenantContext>();
 
-        TenantConfiguration? tenant = null;
+        // 5) Identificar tenant usando la interfaz nativa extendida (ITenantResolver)
+        var tenantConfig = await tenantResolver.ResolveByMetaPhoneNumberIdAsync(phoneNumberId);
 
-        if (tenantResolver is SqlTenantRepository sqlRepo)
-        {
-            tenant = await sqlRepo.ResolveByMetaPhoneNumberIdAsync(phoneNumberId);
-        }
-        else
+        if (tenantConfig == null)
         {
             var all = await tenantResolver.GetAllTenantsAsync();
-            tenant = all.FirstOrDefault(t =>
+            tenantConfig = all.FirstOrDefault(t =>
                 t.MessageProvider.Equals("Meta", StringComparison.OrdinalIgnoreCase) &&
                 t.MessageProviderAccount == phoneNumberId);
         }
 
-        if (tenant == null)
+        if (tenantConfig == null)
         {
             _logger.LogError(
                 "No tenant found for Meta PhoneNumberId {PhoneId}. " +
@@ -154,27 +151,28 @@ public class MetaWebhookController : ControllerBase
         }
 
         // PASO 2: tenant en contexto — ahora el DI puede construir IClientDataAdapter
-        tenantContext.CurrentTenant = tenant;
+        tenantContext.CurrentTenant = tenantConfig;
+        _logger.LogInformation("Tenant Context manually set to {TenantId}", tenantConfig.TenantId);
 
         // PASO 3: recién ahora resolver servicios que dependen del TenantContext
         var orchestrator = scope.ServiceProvider.GetRequiredService<IChatOrchestrator>();
         var messageFactory = scope.ServiceProvider.GetRequiredService<IMessageSenderFactory>();
 
-        var sessionId = GenerateSessionId(tenant.TenantId, fromPhone);
+        var sessionId = GenerateSessionId(tenantConfig.TenantId, fromPhone);
         var metadata = new Dictionary<string, string> { { "phone", fromPhone } };
 
         var result = await orchestrator.ProcessMessageAsync(
             message: text,
             sessionId: sessionId,
-            tenantId: tenant.TenantId,
+            tenantId: tenantConfig.TenantId,
             eventTypePrefix: "Meta",
             additionalMetadata: metadata);
 
-        var sender = messageFactory.CreateSender(tenant);
+        var sender = messageFactory.CreateSender(tenantConfig);
         await sender.SendAsync(fromPhone, result.Response);
 
         _logger.LogInformation(
-            "Meta response sent to {To} (tenant: {TenantId})", fromPhone, tenant.TenantId);
+            "Meta response sent to {To} (tenant: {TenantId})", fromPhone, tenantConfig.TenantId);
     }
 
     private static Guid GenerateSessionId(string tenantId, string phone)

@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using ReceptionistAgent.Api.Security;
-using ReceptionistAgent.Connectors.Repositories;
+using ReceptionistAgent.Core.Repositories; // Changed from ReceptionistAgent.Connectors.Repositories
+using ReceptionistAgent.Core.Models; // Added based on the provided snippet
 
 namespace ReceptionistAgent.Api.Controllers;
 
@@ -15,9 +16,9 @@ namespace ReceptionistAgent.Api.Controllers;
 [ServiceFilter(typeof(ApiKeyAuthFilter))]
 public class MetricsController : ControllerBase
 {
-    private readonly SqlMetricsRepository _metricsRepository;
+    private readonly IMetricsRepository _metricsRepository;
 
-    public MetricsController(SqlMetricsRepository metricsRepository)
+    public MetricsController(IMetricsRepository metricsRepository)
     {
         _metricsRepository = metricsRepository;
     }

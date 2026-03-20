@@ -5,6 +5,7 @@ using ReceptionistAgent.Api.Middleware;
 using ReceptionistAgent.Connectors.Adapters;
 using ReceptionistAgent.Core.Adapters;
 using ReceptionistAgent.Core.Models;
+using ReceptionistAgent.Core.Repositories;
 using ReceptionistAgent.Connectors.Repositories;
 using ReceptionistAgent.Connectors.Security;
 using ReceptionistAgent.Connectors.Services;
@@ -102,15 +103,26 @@ builder.Services.AddRateLimiter(options =>
 var coreConnStr = builder.Configuration
     .GetConnectionString("AgentCore")!;
 
-builder.Services.AddSingleton<SqlTenantRepository>(
-    _ => new SqlTenantRepository(coreConnStr));
+var isPostgres = coreConnStr.Contains("Host=", StringComparison.OrdinalIgnoreCase);
 
-builder.Services.AddSingleton<ITenantResolver>(sp =>
+if (isPostgres)
 {
-    var inner = sp.GetRequiredService<SqlTenantRepository>();
-    var cache = sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
-    return new CachedTenantResolver(inner, cache);
-});
+    builder.Services.AddSingleton<ITenantResolver>(sp =>
+    {
+        var inner = new PostgreSqlTenantRepository(coreConnStr);
+        var cache = sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+        return new CachedTenantResolver(inner, cache);
+    });
+}
+else
+{
+    builder.Services.AddSingleton<ITenantResolver>(sp =>
+    {
+        var inner = new SqlTenantRepository(coreConnStr);
+        var cache = sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+        return new CachedTenantResolver(inner, cache);
+    });
+}
 
 // --- Tenant Configuration ---
 // var tenantsConfig = new Dictionary<string, TenantConfiguration>(StringComparer.OrdinalIgnoreCase);
@@ -154,7 +166,8 @@ builder.Services.AddSingleton<ITenantResolver>(sp =>
 // }
 
 // --- Application Core Services ---
-//builder.Services.AddSingleton<ITenantResolver>(new InMemoryTenantResolver(tenantsConfig));
+builder.Services.AddSingleton<IDataAdapterProvider, SqlServerAdapterProvider>();
+builder.Services.AddSingleton<IDataAdapterProvider, PostgreSqlAdapterProvider>();
 builder.Services.AddSingleton<ClientDataAdapterFactory>();
 builder.Services.AddSingleton<IPromptBuilder, PromptBuilder>();
 //
@@ -166,27 +179,28 @@ builder.Services.AddScoped<IChatSessionRepository>(sp =>
     var tenantContext = sp.GetRequiredService<TenantContext>();
     var tenant = tenantContext.CurrentTenant;
     var tenantConnStr = tenant?.ConnectionString;
+    var providers = sp.GetRequiredService<IEnumerable<IDataAdapterProvider>>();
 
-    if (tenant != null && tenant.DbType.Equals("PostgreSql", StringComparison.OrdinalIgnoreCase))
-    {
-        return new PostgreSqlChatSessionRepository(coreConnStr, tenantConnStr);
-    }
-
-    return new SqlChatSessionRepository(coreConnStr, tenantConnStr);
+    var provider = providers.FirstOrDefault(p => p.Supports(tenant?.DbType ?? "SqlServer"));
+    return provider!.CreateChatSessionRepository(coreConnStr, tenantConnStr);
 });
 
 // --- Security & Audit Services ---
 builder.Services.AddSingleton<IInputGuard, PromptInjectionGuard>();
 builder.Services.AddSingleton<IOutputFilter, SensitiveDataFilter>();
-//
-builder.Services.AddSingleton<IAuditLogger>(
-    _ => new SqlAuditLogger(coreConnStr));
-
-// --- Billing, Reminders & Metrics ---
-builder.Services.AddSingleton<IBillingService>(
-    _ => new SqlBillingService(coreConnStr));
-builder.Services.AddSingleton<IBookingBackupService>(
-    _ => new SqlBookingBackupService(coreConnStr));
+// --- Security, Audit, Billing, Backups ---
+if (isPostgres)
+{
+    builder.Services.AddSingleton<IAuditLogger>(_ => new PostgreSqlAuditLogger(coreConnStr));
+    builder.Services.AddSingleton<IBillingService>(_ => new PostgreSqlBillingService(coreConnStr));
+    builder.Services.AddSingleton<IBookingBackupService>(_ => new PostgreSqlBookingBackupService(coreConnStr));
+}
+else
+{
+    builder.Services.AddSingleton<IAuditLogger>(_ => new SqlAuditLogger(coreConnStr));
+    builder.Services.AddSingleton<IBillingService>(_ => new SqlBillingService(coreConnStr));
+    builder.Services.AddSingleton<IBookingBackupService>(_ => new SqlBookingBackupService(coreConnStr));
+}
 
 builder.Services.AddScoped<IReminderService>(sp =>
 {
@@ -195,16 +209,19 @@ builder.Services.AddScoped<IReminderService>(sp =>
     var tenantContext = sp.GetRequiredService<TenantContext>();
     var tenant = tenantContext.CurrentTenant;
     var tenantConnStr = tenant?.ConnectionString;
+    var providers = sp.GetRequiredService<IEnumerable<IDataAdapterProvider>>();
 
-    if (tenant != null && tenant.DbType.Equals("PostgreSql", StringComparison.OrdinalIgnoreCase))
-    {
-        return new PostgreSqlReminderService(coreConnStr, tenantConnStr);
-    }
-
-    return new SqlReminderService(coreConnStr, tenantConnStr);
+    var provider = providers.FirstOrDefault(p => p.Supports(tenant?.DbType ?? "SqlServer"));
+    return provider!.CreateReminderService(coreConnStr, tenantConnStr);
 });
-builder.Services.AddSingleton<SqlMetricsRepository>(
-    _ => new SqlMetricsRepository(coreConnStr));
+if (isPostgres)
+{
+    builder.Services.AddSingleton<IMetricsRepository>(_ => new PostgreSqlMetricsRepository(coreConnStr));
+}
+else
+{
+    builder.Services.AddSingleton<IMetricsRepository>(_ => new SqlMetricsRepository(coreConnStr));
+}
 
 // Register HTTP Client for Meta API
 builder.Services.AddHttpClient("MetaGraphApi");
