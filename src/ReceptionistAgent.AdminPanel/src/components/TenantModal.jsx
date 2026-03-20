@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { useTheme, businessIcon, planColor, statusColor, fmt, api } from "../styles/tokens";
+import { useTheme, businessIcon, planColor, statusColor, fmt } from "../styles/tokens";
+import api from "../api/client";
 import DatabaseExplorer from "./DatabaseExplorer";
 
 const TABS = [
@@ -24,7 +25,7 @@ export default function TenantModal({ data, onClose, onSuspend, onReactivate, on
   const fetchHealth = async () => {
     setHealthLoading(true);
     try {
-      const resp = await api.get(`/admin/tenants/${tenant.tenantId}/database/health`);
+      const resp = await api.get(`/api/admin/tenants/${tenant.tenantId}/database/health`);
       setDbHealth(resp.data.health);
     } catch (err) {
       console.error("Error fetching DB health:", err);
@@ -37,7 +38,7 @@ export default function TenantModal({ data, onClose, onSuspend, onReactivate, on
     if (!window.confirm("¿Estás seguro de re-inicializar la DB? Esto creará las tablas faltantes si no existen.")) return;
     setLoading(true);
     try {
-      await api.post(`/admin/tenants/${tenant.tenantId}/reinitialize`);
+      await api.post(`/api/admin/tenants/${tenant.tenantId}/reinitialize`);
       alert("DB Re-inicializada correctamente.");
       fetchHealth();
     } catch (err) {
