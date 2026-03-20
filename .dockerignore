@@ -1,0 +1,27 @@
+# Exclude everything by default
+**/*
+
+# Allow only necessary files/folders
+!src/
+!*.sln
+!*.md
+!Dockerfile
+
+# Inside src, ignore build artifacts and environment-specific configs
+src/**/bin/
+src/**/obj/
+src/**/node_modules/
+
+# Top-level ignores
+.vs/
+.vscode/
+.git/
+.dockerignore
+
+# Config ignores
+appsettings.Development.json
+appsettings.Local.json
+*.user
+*.suo
+*.sln.docstates
+.env
