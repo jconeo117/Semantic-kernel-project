@@ -22,13 +22,14 @@ public class InMemoryTenantResolver : ITenantResolver
 
     public Task<TenantConfiguration?> ResolveAsync(string tenantId)
     {
-        if (string.IsNullOrWhiteSpace(tenantId))
-            return Task.FromResult<TenantConfiguration?>(null);
+        _tenants.TryGetValue(tenantId, out var config);
+        return Task.FromResult(config);
+    }
 
-        // Dictionary was created with StringComparer.OrdinalIgnoreCase, so lookup is O(1)
-        return _tenants.TryGetValue(tenantId, out var tenant)
-            ? Task.FromResult<TenantConfiguration?>(tenant)
-            : Task.FromResult<TenantConfiguration?>(null);
+    public Task<TenantConfiguration?> ResolveByMetaPhoneNumberIdAsync(string phoneNumberId)
+    {
+        var config = _tenants.Values.FirstOrDefault(t => t.MessageProviderAccount == phoneNumberId);
+        return Task.FromResult(config);
     }
 
     public Task<List<string>> GetAllTenantIdsAsync()

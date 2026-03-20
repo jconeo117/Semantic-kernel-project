@@ -10,6 +10,7 @@ namespace ReceptionistAgent.Core.Tenant;
 public interface ITenantResolver
 {
     Task<TenantConfiguration?> ResolveAsync(string tenantId);
+    Task<TenantConfiguration?> ResolveByMetaPhoneNumberIdAsync(string phoneNumberId);
     Task<List<string>> GetAllTenantIdsAsync();
 
     // Auth for Client Dashboard

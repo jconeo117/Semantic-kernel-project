@@ -83,6 +83,18 @@ public class CachedTenantResolver : ITenantResolver
         return _inner.GetAllTenantsAsync();
     }
 
+    public async Task<TenantConfiguration?> ResolveByMetaPhoneNumberIdAsync(string phoneNumberId)
+    {
+        if (string.IsNullOrWhiteSpace(phoneNumberId)) return null;
+
+        var cacheKey = $"Tenant_MetaPhone_{phoneNumberId}";
+        return await _cache.GetOrCreateAsync(cacheKey, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
+            return await _inner.ResolveByMetaPhoneNumberIdAsync(phoneNumberId);
+        });
+    }
+
     public Task<List<string>> GetAllTenantIdsAsync()
     {
         return _inner.GetAllTenantIdsAsync();
