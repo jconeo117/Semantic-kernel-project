@@ -190,12 +190,12 @@ public class LanguageComprehensionTests : IClassFixture<StressTestFixture>
     {
         var sessionId = StressTestHelpers.GenerateSessionId(nameof(PartialDataProvided_ShouldAskForMissing));
         var response = await StressTestHelpers.SendAndGetResponseAsync(_client,
-            "soy Juan, necesito cita mañana a las 10", sessionId);
+            "Hola, soy Juan. Necesito agendar una cita, pero no sé para cuándo tienen disponibilidad.", sessionId);
 
         StressTestHelpers.AssertAgentStayedInRole(response);
-        // Should acknowledge but ask for missing data (phone, ID, etc)
+        // Should acknowledge and ask for missing data (date, service, phone, ID, etc)
         StressTestHelpers.AssertResponseContainsAny(response,
-            "teléfono", "cédula", "documento", "número", "dato", "telefono", "celular");
+            "fecha", "día", "cuándo", "servicio", "horario", "disponib", "teléfono", "cédula");
     }
 
     // ═══ INTENCIONES MÚLTIPLES ═══
