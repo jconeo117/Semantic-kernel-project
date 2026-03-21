@@ -77,7 +77,7 @@ public class PostgreSqlClientDataAdapter : IClientDataAdapter
             booking.ProviderId,
             booking.ProviderName,
             booking.ScheduledDate,
-            ScheduledTime = TimeOnly.FromTimeSpan(booking.ScheduledTime),
+            ScheduledTime = booking.ScheduledTime,
             Status = booking.Status.ToString(),
             booking.CreatedAt,
             CustomFieldsJson = JsonSerializer.Serialize(booking.CustomFields)
@@ -145,7 +145,7 @@ public class PostgreSqlClientDataAdapter : IClientDataAdapter
             booking.ProviderId,
             booking.ProviderName,
             booking.ScheduledDate,
-            ScheduledTime = TimeOnly.FromTimeSpan(booking.ScheduledTime),
+            ScheduledTime = booking.ScheduledTime,
             Status = booking.Status.ToString(),
             booking.UpdatedAt,
             CustomFieldsJson = JsonSerializer.Serialize(booking.CustomFields),
@@ -186,7 +186,7 @@ public class PostgreSqlClientDataAdapter : IClientDataAdapter
         {
             ProviderId = providerId,
             Date = date.Date,
-            Time = TimeOnly.FromTimeSpan(time), // Convert TimeSpan to TimeOnly for Postgres input
+            Time = time,
             CancelledStatus = BookingStatus.Cancelled.ToString()
         });
 
