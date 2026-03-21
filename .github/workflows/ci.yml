@@ -12,10 +12,30 @@ jobs:
     name: Build & Test
     runs-on: ubuntu-latest
     
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: jhon0106
+          POSTGRES_DB: receptionist_agent_core
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
     
+    - name: Initialize Database
+      run: |
+        sudo apt-get install -y postgresql-client
+        PGPASSWORD=jhon0106 psql -h localhost -U postgres -d receptionist_agent_core -f receptionist_agent_core_data.sql
+
     - name: Setup .NET 9
       uses: actions/setup-dotnet@v4
       with:
