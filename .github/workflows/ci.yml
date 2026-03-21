@@ -31,10 +31,10 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
     
-    - name: Initialize Database
+    - name: Initialize Mock Database for Tests
       run: |
         sudo apt-get install -y postgresql-client
-        PGPASSWORD=jhon0106 psql -h localhost -U postgres -d receptionist_agent_core -f receptionist_agent_core_data.sql
+        PGPASSWORD=jhon0106 psql -h localhost -U postgres -d receptionist_agent_core -c "CREATE TABLE tenants (tenant_id VARCHAR, business_name VARCHAR, business_type VARCHAR, db_type VARCHAR, connection_string VARCHAR, time_zone_id VARCHAR, phone_country_code VARCHAR, address VARCHAR, phone VARCHAR, working_hours VARCHAR, services TEXT, accepted_insurance TEXT, pricing TEXT, custom_settings TEXT, username VARCHAR, password_hash VARCHAR, message_provider VARCHAR, message_provider_account VARCHAR, message_provider_token VARCHAR, message_provider_phone VARCHAR, is_active BOOLEAN, created_at TIMESTAMP, updated_at TIMESTAMP);"
 
     - name: Setup .NET 9
       uses: actions/setup-dotnet@v4
