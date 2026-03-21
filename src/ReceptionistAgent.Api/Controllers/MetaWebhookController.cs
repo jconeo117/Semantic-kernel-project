@@ -55,14 +55,14 @@ public class MetaWebhookController : ControllerBase
     /// Meta espera un 200 OK inmediato — el procesamiento ocurre en background.
     /// </summary>
     [HttpPost]
-    public IActionResult ReceiveMessage([FromBody] JsonElement body)
+    public async Task<IActionResult> ReceiveMessage([FromBody] JsonElement body)
     {
         try
         {
             if (body.TryGetProperty("object", out var objProp) &&
                 objProp.GetString() == "whatsapp_business_account")
             {
-                _ = Task.Run(async () => await ProcessPayloadAsync(body));
+                await ProcessPayloadAsync(body);
                 return Ok();
             }
 
