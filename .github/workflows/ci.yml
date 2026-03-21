@@ -1,0 +1,42 @@
+name: .NET CI Pipeline
+
+on:
+  push:
+    branches: [ "main", "dev", "master" ]
+  pull_request:
+    branches: [ "main", "dev", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET 9
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+        
+    - name: Restore dependencies
+      run: dotnet restore ReceptionistAgent.sln
+      
+    - name: Build solution
+      run: dotnet build ReceptionistAgent.sln --no-restore --configuration Release
+      
+    - name: Run Unit Tests (ReceptionistAgent.Tests)
+      run: dotnet test src/ReceptionistAgent.Tests --no-build --configuration Release --verbosity normal
+
+    - name: Run Stress Tests (Requires Gemini Key)
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      # Ejecutar soolo si el secreto está configurado (para evitar gastar balance en PRs no autorizados o fallos por falta de token)
+      if: "${{ env.GEMINI_API_KEY != '' }}"
+      run: |
+        # Configurar variables de entorno que .NET leerá
+        export AI__Google__ApiKey="${{ secrets.GEMINI_API_KEY }}"
+        export AI__Provider="Google"
+        dotnet test src/ReceptionistAgent.StressTests --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=stress_test_results.trx"
