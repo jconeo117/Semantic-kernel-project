@@ -2,6 +2,12 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Moq;
+using ReceptionistAgent.Core.Models;
+using ReceptionistAgent.Core.Tenant;
 using Xunit;
 
 namespace ReceptionistAgent.Tests.Integration;
@@ -9,10 +15,34 @@ namespace ReceptionistAgent.Tests.Integration;
 public class TenantMiddlewareIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly HttpClient _client;
+    private readonly WebApplicationFactory<Program> _factory;
 
     public TenantMiddlewareIntegrationTests(WebApplicationFactory<Program> factory)
     {
-        _client = factory.CreateClient();
+        _factory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                var mockTenantResolver = new Mock<ITenantResolver>();
+                var mockTenant = new TenantConfiguration
+                {
+                    TenantId = "clinica-salud-total",
+                    BusinessName = "Clínica Salud Total",
+                    BusinessType = "clinic",
+                    DbType = "InMemory"
+                };
+
+                mockTenantResolver.Setup(r => r.ResolveAsync("clinica-salud-total"))
+                    .ReturnsAsync(mockTenant);
+                mockTenantResolver.Setup(r => r.GetAllTenantIdsAsync())
+                    .ReturnsAsync(new List<string> { "clinica-salud-total" });
+                mockTenantResolver.Setup(r => r.GetAllTenantsAsync())
+                    .ReturnsAsync(new List<TenantConfiguration> { mockTenant });
+
+                services.Replace(ServiceDescriptor.Singleton<ITenantResolver>(mockTenantResolver.Object));
+            });
+        });
+        _client = _factory.CreateClient();
     }
 
     [Fact]

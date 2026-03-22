@@ -25,7 +25,8 @@ public class ClientDataAdapterFactoryTests
 
         var providers = new List<IDataAdapterProvider>
         {
-            new SqlServerAdapterProvider()
+            new SqlServerAdapterProvider(),
+            new PostgreSqlAdapterProvider()
         };
 
         _factory = new ClientDataAdapterFactory(_mockBackup.Object, _mockLoggerFactory.Object, providers);
@@ -51,6 +52,28 @@ public class ClientDataAdapterFactoryTests
 
         // Assert
         Assert.IsType<SqlClientDataAdapter>(adapter);
+    }
+
+    [Fact]
+    public void CreateAdapter_WithPostgreSqlDbType_ShouldReturnPostgreSqlClientDataAdapter()
+    {
+        // Arrange
+        var tenantConfig = new TenantConfiguration
+        {
+            TenantId = "TEST-TENANT",
+            DbType = "PostgreSQL",
+            ConnectionString = "Host=localhost;Database=test;Username=test;Password=test",
+            Providers = new List<TenantProviderConfig>
+            {
+                new() { Id = "P1", Name = "Provider 1" }
+            }
+        };
+
+        // Act
+        var adapter = _factory.CreateAdapter(tenantConfig);
+
+        // Assert
+        Assert.IsType<PostgreSqlClientDataAdapter>(adapter);
     }
 
     [Fact]
