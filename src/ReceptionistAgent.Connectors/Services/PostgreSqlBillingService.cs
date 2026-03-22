@@ -16,7 +16,7 @@ public class PostgreSqlBillingService : IBillingService
 
     public async Task<TenantBilling?> GetBillingAsync(string tenantId)
     {
-        const string sql = "SELECT tenant_id AS \"TenantId\", plan_type AS \"PlanType\", billing_status AS \"BillingStatus\", active_until AS \"ActiveUntil\", suspended_at AS \"SuspendedAt\", suspension_reason AS \"SuspensionReason\", notes AS \"Notes\" FROM TenantBilling WHERE tenant_id = @TenantId";
+        const string sql = "SELECT tenant_id AS \"TenantId\", plan_type AS \"PlanType\", billing_status AS \"BillingStatus\", active_until AS \"ActiveUntil\", suspended_at AS \"SuspendedAt\", suspension_reason AS \"SuspensionReason\", notes AS \"Notes\" FROM tenant_billing WHERE tenant_id = @TenantId";
         using var connection = new NpgsqlConnection(_connectionString);
         var entity = await connection.QuerySingleOrDefaultAsync<BillingEntity>(sql, new { TenantId = tenantId });
 
@@ -42,7 +42,7 @@ public class PostgreSqlBillingService : IBillingService
     public async Task SuspendTenantAsync(string tenantId, string reason)
     {
         const string sql = @"
-            UPDATE TenantBilling SET
+            UPDATE tenant_billing SET
                 billing_status = @Status,
                 suspended_at = @Now,
                 suspension_reason = @Reason
@@ -61,7 +61,7 @@ public class PostgreSqlBillingService : IBillingService
     public async Task ReactivateTenantAsync(string tenantId, DateTime activeUntil)
     {
         const string sql = @"
-            UPDATE TenantBilling SET
+            UPDATE tenant_billing SET
                 billing_status = @Status,
                 active_until = @ActiveUntil,
                 suspended_at = NULL,
@@ -80,7 +80,7 @@ public class PostgreSqlBillingService : IBillingService
     public async Task UpdateBillingAsync(TenantBilling billing)
     {
         const string sql = @"
-            UPDATE TenantBilling SET
+            UPDATE tenant_billing SET
                 plan_type = @PlanType,
                 billing_status = @BillingStatus,
                 active_until = @ActiveUntil,
@@ -105,7 +105,7 @@ public class PostgreSqlBillingService : IBillingService
     public async Task CreateBillingAsync(TenantBilling billing)
     {
         const string sql = @"
-            INSERT INTO TenantBilling (tenant_id, plan_type, billing_status, active_until, notes)
+            INSERT INTO tenant_billing (tenant_id, plan_type, billing_status, active_until, notes)
             VALUES (@TenantId, @PlanType, @BillingStatus, @ActiveUntil, @Notes)";
 
         using var connection = new NpgsqlConnection(_connectionString);
